@@ -1,90 +1,96 @@
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Search } from "lucide-react";
-
-const mockPackets = [
-  { id: 1, timestamp: "2025-01-15 10:23:45", sourceIP: "192.168.1.45", destIP: "10.0.0.1", protocol: "TCP", prediction: "Normal", confidence: 0.94 },
-  { id: 2, timestamp: "2025-01-15 10:23:46", sourceIP: "172.16.0.23", destIP: "10.0.0.1", protocol: "UDP", prediction: "Malicious", confidence: 0.87 },
-  { id: 3, timestamp: "2025-01-15 10:23:47", sourceIP: "192.168.1.102", destIP: "10.0.0.1", protocol: "HTTP", prediction: "Normal", confidence: 0.96 },
-  { id: 4, timestamp: "2025-01-15 10:23:48", sourceIP: "10.20.30.40", destIP: "10.0.0.1", protocol: "HTTPS", prediction: "Normal", confidence: 0.98 },
-  { id: 5, timestamp: "2025-01-15 10:23:49", sourceIP: "203.0.113.15", destIP: "10.0.0.1", protocol: "TCP", prediction: "Malicious", confidence: 0.92 },
-];
+import { useToast } from "@/components/ui/use-toast";
+import { predictIntrusion, api } from "@/lib/api";
 
 export default function Monitor() {
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [features, setFeatures] = useState("");
+  const [result, setResult] = useState(null);
+  const [history, setHistory] = useState([]);
+  const { toast } = useToast();
 
-  const filteredPackets = mockPackets.filter(packet => {
-    const matchesSearch = packet.sourceIP.includes(search) || packet.destIP.includes(search);
-    const matchesFilter = filter === "all" || packet.prediction.toLowerCase() === filter;
-    return matchesSearch && matchesFilter;
-  });
+  // Fetch prediction history from backend
+  const fetchHistory = async () => {
+    try {
+      const res = await api.get("/monitor/history");
+      setHistory(res.data);
+    } catch (err) {
+      console.error("Error fetching history:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
+
+  const handlePredict = async () => {
+    try {
+      const featureArray = features.split(",").map(Number);
+      const res = await predictIntrusion(featureArray);
+      setResult(res.prediction);
+      toast({
+        title: "Prediction Successful",
+        description: `Result: ${res.prediction.toUpperCase()}`,
+      });
+      fetchHistory(); // Refresh history after prediction
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Unable to connect to the backend API.",
+      });
+      console.error(err);
+    }
+  };
 
   return (
-    <div className="space-y-6">
-      <Card className="border-border bg-card/50 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="text-foreground">Live Network Monitor</CardTitle>
-          <div className="flex flex-col md:flex-row gap-4 mt-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by IP address..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 bg-background/50"
-              />
-            </div>
-            <Select value={filter} onValueChange={setFilter}>
-              <SelectTrigger className="w-full md:w-48 bg-background/50">
-                <SelectValue placeholder="Filter by prediction" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Packets</SelectItem>
-                <SelectItem value="normal">Normal</SelectItem>
-                <SelectItem value="malicious">Malicious</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Timestamp</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Source IP</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Dest IP</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Protocol</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Prediction</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Confidence</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPackets.map((packet) => (
-                  <tr key={packet.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                    <td className="py-3 px-4 text-sm text-foreground">{packet.timestamp}</td>
-                    <td className="py-3 px-4 text-sm font-mono text-primary">{packet.sourceIP}</td>
-                    <td className="py-3 px-4 text-sm font-mono text-foreground">{packet.destIP}</td>
-                    <td className="py-3 px-4 text-sm">
-                      <Badge variant="outline">{packet.protocol}</Badge>
-                    </td>
-                    <td className="py-3 px-4 text-sm">
-                      <Badge variant={packet.prediction === "Normal" ? "default" : "destructive"}>
-                        {packet.prediction}
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-foreground">{(packet.confidence * 100).toFixed(1)}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="p-6 space-y-6">
+      <h1 className="text-2xl font-semibold">Network Monitor</h1>
+      <p>Enter NSL-KDD feature values separated by commas:</p>
+      <div className="flex gap-2">
+        <Input
+          value={features}
+          onChange={(e) => setFeatures(e.target.value)}
+          placeholder="e.g. 0,0,1,0,181,5450,0,..."
+        />
+        <Button onClick={handlePredict}>Predict</Button>
+      </div>
+
+      {result && (
+        <div className="p-4 border rounded-lg mt-4">
+          <h2 className="font-bold text-lg">
+            🧠 Prediction:{" "}
+            <span className={result === "attack" ? "text-red-600" : "text-green-600"}>
+              {result.toUpperCase()}
+            </span>
+          </h2>
+        </div>
+      )}
+
+      {/* Prediction History Table */}
+      <div className="overflow-x-auto mt-6">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Timestamp</th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Prediction</th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Confidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.map((item, idx) => (
+              <tr key={idx} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
+                <td className="py-3 px-4 text-sm text-foreground">{item.timestamp}</td>
+                <td className={`py-3 px-4 text-sm font-bold ${item.prediction === "attack" ? "text-red-600" : "text-green-600"}`}>
+                  {item.prediction.toUpperCase()}
+                </td>
+                <td className="py-3 px-4 text-sm text-foreground">{(item.confidence * 100).toFixed(1)}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
