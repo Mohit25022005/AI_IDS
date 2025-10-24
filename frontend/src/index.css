@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 210 30% 8%;
+    --foreground: 210 20% 98%;
+
+    --card: 210 25% 10%;
+    --card-foreground: 210 20% 98%;
+
+    --popover: 210 30% 12%;
+    --popover-foreground: 210 20% 98%;
+
+    --primary: 189 95% 55%;
+    --primary-foreground: 210 30% 8%;
+
+    --secondary: 210 20% 16%;
+    --secondary-foreground: 210 20% 98%;
+
+    --muted: 210 20% 16%;
+    --muted-foreground: 210 15% 65%;
+
+    --accent: 189 95% 45%;
+    --accent-foreground: 210 20% 98%;
+
+    --destructive: 0 85% 60%;
+    --destructive-foreground: 210 20% 98%;
+
+    --success: 142 76% 45%;
+    --success-foreground: 210 20% 98%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 210 20% 98%;
+
+    --border: 210 20% 20%;
+    --input: 210 20% 20%;
+    --ring: 189 95% 55%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 210 30% 9%;
+    --sidebar-foreground: 210 20% 90%;
+    --sidebar-primary: 189 95% 55%;
+    --sidebar-primary-foreground: 210 30% 8%;
+    --sidebar-accent: 210 25% 14%;
+    --sidebar-accent-foreground: 210 20% 98%;
+    --sidebar-border: 210 20% 18%;
+    --sidebar-ring: 189 95% 55%;
+
+    --chart-1: 189 95% 55%;
+    --chart-2: 268 75% 60%;
+    --chart-3: 142 76% 45%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 0 85% 60%;
+
+    --gradient-cyber: linear-gradient(135deg, hsl(189 95% 55% / 0.2), hsl(268 75% 60% / 0.2));
+    --gradient-threat: linear-gradient(135deg, hsl(0 85% 60% / 0.2), hsl(38 92% 50% / 0.2));
+    --gradient-safe: linear-gradient(135deg, hsl(142 76% 45% / 0.2), hsl(189 95% 55% / 0.2));
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
