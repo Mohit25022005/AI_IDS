@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Shield, Activity, AlertTriangle, TrendingUp } from "lucide-react";
 import MetricCard from "@/components/MetricCard";
 import TrafficChart from "@/components/TrafficChart";
@@ -11,26 +11,33 @@ export default function Dashboard() {
     threatsDetected: "0",
     modelAccuracy: "0%",
     systemStatus: "Safe",
+    packetTrend: "+0%",
+    threatTrend: "+0",
+    accuracyTrend: "+0%",
   });
 
   const [trafficData, setTrafficData] = useState([]);
   const [threatData, setThreatData] = useState([]);
 
+  const fetchDashboard = async () => {
+    try {
+      const metricsRes = await api.get("/dashboard/metrics");
+      setMetrics(metricsRes.data);
+
+      const trafficRes = await api.get("/dashboard/traffic");
+      setTrafficData(trafficRes.data);
+
+      const threatsRes = await api.get("/dashboard/threats");
+      setThreatData(threatsRes.data);
+    } catch (err) {
+      console.error("Error fetching dashboard data:", err);
+    }
+  };
+
   useEffect(() => {
-    // Fetch overall metrics
-    api.get("/dashboard/metrics")
-      .then(res => setMetrics(res.data))
-      .catch(console.error);
-
-    // Fetch traffic data for chart
-    api.get("/dashboard/traffic")
-      .then(res => setTrafficData(res.data))
-      .catch(console.error);
-
-    // Fetch threat distribution data
-    api.get("/dashboard/threats")
-      .then(res => setThreatData(res.data))
-      .catch(console.error);
+    fetchDashboard(); // initial fetch
+    const interval = setInterval(fetchDashboard, 5000); // update every 5s
+    return () => clearInterval(interval);
   }, []);
 
   return (

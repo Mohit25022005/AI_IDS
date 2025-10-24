@@ -51,6 +51,13 @@ def predict():
 
     data = request.get_json()
     features = np.array(data['features']).reshape(1, -1)
+
+    # ✅ Validate number of features
+    if features.shape[1] != model.n_features_in_:
+        return jsonify({
+            "error": f"Expected {model.n_features_in_} features, got {features.shape[1]}"
+        }), 400
+
     scaled_features = scaler.transform(features)
     prediction = model.predict(scaled_features)[0]
     confidence = float(np.max(model.predict_proba(scaled_features)))

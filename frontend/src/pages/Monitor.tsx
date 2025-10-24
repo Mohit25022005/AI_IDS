@@ -8,9 +8,10 @@ export default function Monitor() {
   const [features, setFeatures] = useState("");
   const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
+  const [alerts, setAlerts] = useState([]);
   const { toast } = useToast();
 
-  // Fetch prediction history from backend
+  // Fetch prediction history
   const fetchHistory = async () => {
     try {
       const res = await api.get("/monitor/history");
@@ -20,8 +21,24 @@ export default function Monitor() {
     }
   };
 
+  // Fetch alerts
+  const fetchAlerts = async () => {
+    try {
+      const res = await api.get("/monitor/alerts");
+      setAlerts(res.data);
+    } catch (err) {
+      console.error("Error fetching alerts:", err);
+    }
+  };
+
   useEffect(() => {
     fetchHistory();
+    fetchAlerts();
+    const interval = setInterval(() => {
+      fetchHistory();
+      fetchAlerts();
+    }, 5000); // update every 5s
+    return () => clearInterval(interval);
   }, []);
 
   const handlePredict = async () => {
@@ -33,7 +50,8 @@ export default function Monitor() {
         title: "Prediction Successful",
         description: `Result: ${res.prediction.toUpperCase()}`,
       });
-      fetchHistory(); // Refresh history after prediction
+      fetchHistory();
+      fetchAlerts();
     } catch (err) {
       toast({
         variant: "destructive",
@@ -90,6 +108,21 @@ export default function Monitor() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Alerts */}
+      <div className="mt-6">
+        <h2 className="text-xl font-semibold">Alerts</h2>
+        <ul className="space-y-2 mt-2">
+          {alerts.map((alert) => (
+            <li key={alert.id} className="p-3 border rounded-lg bg-red-50 border-red-200">
+              <p className="font-bold">{alert.type}</p>
+              <p>{alert.description}</p>
+              <p className="text-sm text-muted-foreground">{alert.timestamp}</p>
+            </li>
+          ))}
+          {alerts.length === 0 && <p className="text-sm text-muted-foreground">No active alerts</p>}
+        </ul>
       </div>
     </div>
   );

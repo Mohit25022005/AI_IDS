@@ -21,23 +21,28 @@ export default function Insights() {
   ]);
 
   useEffect(() => {
-    // Fetch metrics
-    fetch("http://127.0.0.1:5000/insights/metrics")
-      .then((res) => res.json())
-      .then((data) => setMetrics(data))
-      .catch(console.error);
+    const fetchData = async () => {
+      try {
+        const metricsRes = await fetch("http://127.0.0.1:5000/insights/metrics");
+        const metricsData = await metricsRes.json();
+        setMetrics(metricsData);
 
-    // Fetch confusion matrix
-    fetch("http://127.0.0.1:5000/insights/confusion")
-      .then((res) => res.json())
-      .then((data) => setConfusionMatrix(data))
-      .catch(console.error);
+        const confusionRes = await fetch("http://127.0.0.1:5000/insights/confusion");
+        const confusionData = await confusionRes.json();
+        setConfusionMatrix(confusionData);
 
-    // Fetch traffic / normal vs attack counts
-    fetch("http://127.0.0.1:5000/insights/traffic")
-      .then((res) => res.json())
-      .then((data) => setTrafficData(data))
-      .catch(console.error);
+        const trafficRes = await fetch("http://127.0.0.1:5000/insights/traffic");
+        const trafficData = await trafficRes.json();
+        setTrafficData(trafficData);
+      } catch (err) {
+        console.error("Error fetching insights:", err);
+      }
+    };
+
+    fetchData(); // initial fetch
+    const interval = setInterval(fetchData, 5000); // fetch every 5 seconds
+
+    return () => clearInterval(interval); // cleanup on unmount
   }, []);
 
   return (
