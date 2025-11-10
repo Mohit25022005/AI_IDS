@@ -4,6 +4,10 @@ import joblib
 import numpy as np
 import os
 from datetime import datetime
+import random
+
+# Import your URL conversion function
+from url_kdd import generate_kdd_features_from_url  # We'll create this function in url_kdd.py
 
 app = Flask(__name__)
 CORS(app)
@@ -22,8 +26,8 @@ settings = {
 }
 
 # ---------------- In-Memory Storage ----------------
-prediction_history = []  # Store last N predictions
-alerts_data = []        # Store threat alerts
+prediction_history = []
+alerts_data = []
 
 # ---------------- Load Model ----------------
 def load_model(model_file='model.pkl', scaler_file='scaler.pkl'):
@@ -51,41 +55,47 @@ def predict():
         return jsonify({"error": "Model not loaded"}), 500
 
     data = request.get_json(silent=True)
-    if not data or 'features' not in data:
-        return jsonify({"error": "Missing 'features' in request body"}), 400
+    features_input = data.get('features')
+    url_input = data.get('url')
 
-    raw_input = data['features']
-
-    # Accept either list of numbers or comma-separated string of numbers
-    if isinstance(raw_input, str):
-        raw_list = [x.strip() for x in raw_input.split(',')]
-    elif isinstance(raw_input, list):
-        raw_list = raw_input
-    else:
-        return jsonify({"error": "Invalid input type"}), 400
-
-    # Convert all values to float
     numeric_features = []
-    for val in raw_list[:41]:  # Only first 41 numeric features
+
+    if features_input:
+        # Use manual numeric input
+        if isinstance(features_input, str):
+            raw_list = [x.strip() for x in features_input.split(',')]
+        elif isinstance(features_input, list):
+            raw_list = features_input
+        else:
+            return jsonify({"error": "Invalid features format"}), 400
+
+        for val in raw_list[:41]:
+            try:
+                numeric_features.append(float(val))
+            except:
+                numeric_features.append(0.0)
+
+    elif url_input:
+        # Use your url_kdd.py code to generate features from URL
         try:
-            numeric_features.append(float(val))
-        except:
-            numeric_features.append(0.0)
+            numeric_features = generate_kdd_features_from_url(url_input)
+            if len(numeric_features) != 41:
+                return jsonify({"error": f"URL conversion produced {len(numeric_features)} features; expected 41"}), 400
+        except Exception as e:
+            return jsonify({"error": f"Failed to generate features from URL: {str(e)}"}), 500
 
-    # Validate feature count
-    if len(numeric_features) != model.n_features_in_:
-        return jsonify({
-            "error": f"Expected {model.n_features_in_} numeric features, got {len(numeric_features)}"
-        }), 400
+    else:
+        return jsonify({"error": "Missing 'features' or 'url' in request body"}), 400
 
-    features = np.array(numeric_features).reshape(1, -1)
-    features_scaled = scaler.transform(features)
+    # Convert to numpy array and scale
+    features_arr = np.array(numeric_features).reshape(1, -1)
+    features_scaled = scaler.transform(features_arr)
 
     prediction = model.predict(features_scaled)[0]
     confidence = float(np.max(model.predict_proba(features_scaled)))
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Store in history
+    # Store prediction history
     prediction_history.append({
         "timestamp": timestamp,
         "prediction": prediction,
@@ -107,7 +117,8 @@ def predict():
     return jsonify({
         "prediction": prediction,
         "confidence": confidence,
-        "features_used": len(numeric_features)
+        "timestamp": timestamp,
+        "features_used": numeric_features
     })
 
 # ---------------- Monitor History ----------------
