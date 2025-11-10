@@ -24,7 +24,7 @@ export default function Monitor() {
   // Fetch alerts
   const fetchAlerts = async () => {
     try {
-      const res = await api.get("/monitor/alerts");
+      const res = await api.get("/alerts");
       setAlerts(res.data);
     } catch (err) {
       console.error("Error fetching alerts:", err);
@@ -53,12 +53,15 @@ export default function Monitor() {
       fetchHistory();
       fetchAlerts();
     } catch (err) {
+      console.error(err);
+      // Show backend error if available
+      const errorMsg =
+        err.response?.data?.error || "Unable to connect to the backend API.";
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Unable to connect to the backend API.",
+        description: errorMsg,
       });
-      console.error(err);
     }
   };
 
@@ -79,7 +82,11 @@ export default function Monitor() {
         <div className="p-4 border rounded-lg mt-4">
           <h2 className="font-bold text-lg">
             🧠 Prediction:{" "}
-            <span className={result === "attack" ? "text-red-600" : "text-green-600"}>
+            <span
+              className={
+                result === "attack" ? "text-red-600" : "text-green-600"
+              }
+            >
               {result.toUpperCase()}
             </span>
           </h2>
@@ -91,19 +98,38 @@ export default function Monitor() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Timestamp</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Prediction</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Confidence</th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
+                Timestamp
+              </th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
+                Prediction
+              </th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
+                Confidence
+              </th>
             </tr>
           </thead>
           <tbody>
             {history.map((item, idx) => (
-              <tr key={idx} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                <td className="py-3 px-4 text-sm text-foreground">{item.timestamp}</td>
-                <td className={`py-3 px-4 text-sm font-bold ${item.prediction === "attack" ? "text-red-600" : "text-green-600"}`}>
+              <tr
+                key={idx}
+                className="border-b border-border/50 hover:bg-secondary/30 transition-colors"
+              >
+                <td className="py-3 px-4 text-sm text-foreground">
+                  {item.timestamp}
+                </td>
+                <td
+                  className={`py-3 px-4 text-sm font-bold ${
+                    item.prediction === "attack"
+                      ? "text-red-600"
+                      : "text-green-600"
+                  }`}
+                >
                   {item.prediction.toUpperCase()}
                 </td>
-                <td className="py-3 px-4 text-sm text-foreground">{(item.confidence * 100).toFixed(1)}%</td>
+                <td className="py-3 px-4 text-sm text-foreground">
+                  {(item.confidence * 100).toFixed(1)}%
+                </td>
               </tr>
             ))}
           </tbody>
@@ -115,13 +141,18 @@ export default function Monitor() {
         <h2 className="text-xl font-semibold">Alerts</h2>
         <ul className="space-y-2 mt-2">
           {alerts.map((alert) => (
-            <li key={alert.id} className="p-3 border rounded-lg bg-red-50 border-red-200">
+            <li
+              key={alert.id}
+              className="p-3 border rounded-lg bg-black-50 border-red-200"
+            >
               <p className="font-bold">{alert.type}</p>
               <p>{alert.description}</p>
               <p className="text-sm text-muted-foreground">{alert.timestamp}</p>
             </li>
           ))}
-          {alerts.length === 0 && <p className="text-sm text-muted-foreground">No active alerts</p>}
+          {alerts.length === 0 && (
+            <p className="text-sm text-muted-foreground">No active alerts</p>
+          )}
         </ul>
       </div>
     </div>
