@@ -21,14 +21,41 @@ export default function Dashboard() {
 
   const fetchDashboard = async () => {
     try {
-      const metricsRes = await api.get("/dashboard/metrics");
-      setMetrics(metricsRes.data);
+      // Fetch prediction history
+      const historyRes = await api.get("/monitor/history");
+      const history = historyRes.data;
 
-      const trafficRes = await api.get("/dashboard/traffic");
-      setTrafficData(trafficRes.data);
+      // Fetch alerts
+      const alertsRes = await api.get("/alerts");
+      const alerts = alertsRes.data;
 
-      const threatsRes = await api.get("/dashboard/threats");
-      setThreatData(threatsRes.data);
+      // Compute metrics
+      const packetsAnalyzed = history.length;
+      const threatsDetected = alerts.length;
+      const attacks = history.filter(h => h.prediction === "attack").length;
+      const accuracy =
+        history.length > 0 ? ((packetsAnalyzed - attacks) / packetsAnalyzed) * 100 : 0;
+      const systemStatus = threatsDetected > 0 ? "Under Attack" : "Safe";
+
+      setMetrics({
+        packetsAnalyzed,
+        threatsDetected,
+        modelAccuracy: `${accuracy.toFixed(1)}%`,
+        systemStatus,
+        packetTrend: "+0%", // optional: compute dynamically
+        threatTrend: `+${threatsDetected}`,
+        accuracyTrend: "+0%", // optional
+      });
+
+      // Traffic chart
+      setTrafficData([
+        { name: "Normal", count: history.filter(h => h.prediction === "normal").length },
+        { name: "Attack", count: attacks },
+      ]);
+
+      // Threat distribution
+      setThreatData(alerts);
+
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
     }
@@ -36,7 +63,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDashboard(); // initial fetch
-    const interval = setInterval(fetchDashboard, 5000); // update every 5s
+    const interval = setInterval(fetchDashboard, 3000); // update every 3s
     return () => clearInterval(interval);
   }, []);
 
