@@ -1,7 +1,7 @@
 import axios from "axios";
 
-const API_BASE_URL = "http://127.0.0.1:5000";
-
+//const API_BASE_URL = "http://127.0.0.1:5000";
+const API_BASE_URL = "https://ai-ids-8iel.onrender.com";
 // ---------------- Axios Instance ----------------
 export const api = axios.create({
   baseURL: API_BASE_URL,
