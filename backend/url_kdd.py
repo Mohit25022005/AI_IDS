@@ -1,84 +1,110 @@
 from scapy.all import sniff, IP, TCP, UDP
-from datetime import datetime, timedelta
+from datetime import datetime
 import webbrowser
-import pandas as pd
+
 
 def generate_kdd_features_from_url(url, capture_time=8, window_size=2):
-    """Open URL, capture packets, and return exactly 41 numeric features."""
-    import webbrowser, pandas as pd
-    from scapy.all import sniff, IP, TCP, UDP
-    from datetime import datetime, timedelta
+    """Capture traffic from URL and generate EXACT 41 NSL-KDD features."""
 
     webbrowser.open(url)
-    connections = []
+
+    connections_map = {}
 
     def process_packet(packet):
         if IP not in packet:
             return
+
         proto = "tcp" if TCP in packet else ("udp" if UDP in packet else "other")
         src = packet[IP].src
         dst = packet[IP].dst
         sport = packet[TCP].sport if TCP in packet else (packet[UDP].sport if UDP in packet else 0)
         dport = packet[TCP].dport if TCP in packet else (packet[UDP].dport if UDP in packet else 0)
-        timestamp = datetime.now()
+
+        key = (src, dst, sport, dport, proto)
+        now = datetime.now()
         pkt_len = len(packet)
-        service = "http" if dport in [80, 8080] else "https" if dport == 443 else "other"
-        connections.append({
-            "time": timestamp,
-            "src": src,
-            "dst": dst,
-            "sport": sport,
-            "dport": dport,
-            "protocol_type": proto,
-            "service": service,
-            "src_bytes": pkt_len,
-            "dst_bytes": 0,
-            "flag": "SF",
-            "duration": 0
-        })
+
+        if key not in connections_map:
+            connections_map[key] = {
+                "start": now,
+                "last": now,
+                "src": src,
+                "dst": dst,
+                "protocol_type": proto,
+                "service": "http" if dport in [80, 8080] else ("https" if dport == 443 else "other"),
+                "src_bytes": 0,
+                "dst_bytes": 0,
+            }
+
+        conn = connections_map[key]
+        conn["last"] = now
+        conn["src_bytes"] += pkt_len
 
     sniff(timeout=capture_time, prn=process_packet)
-    df = pd.DataFrame(connections)
 
-    if df.empty:
-        # No packets captured → return zeros
+    # If no packets captured → return safe vector
+    if not connections_map:
         return [0.0] * 41
 
-    row = df.iloc[-1]
-    start_time = row["time"] - timedelta(seconds=window_size)
-    recent = df[(df["time"] >= start_time) & (df["time"] <= row["time"])]
+    conn = list(connections_map.values())[-1]
 
-    same_host = recent[recent["dst"] == row["dst"]]
-    same_service = same_host[same_host["service"] == row["service"]]
+    # ---------------- Core Features ----------------
+    duration = int((conn["last"] - conn["start"]).total_seconds())
+
+    protocol = 1 if conn["protocol_type"] == "tcp" else (0 if conn["protocol_type"] == "udp" else 2)
+    service = 1 if conn["service"] == "http" else (2 if conn["service"] == "https" else 0)
+    flag = 1  # approximated as SF
+
+    src_bytes = int(conn["src_bytes"])
+    dst_bytes = int(conn["dst_bytes"])
+
+    # ---------------- Window Stats ----------------
+    now = datetime.now()
+    recent = [
+        c for c in connections_map.values()
+        if (now - c["last"]).total_seconds() <= window_size
+    ]
+
+    same_host = [c for c in recent if c["dst"] == conn["dst"]]
+    same_service = [c for c in same_host if c["service"] == conn["service"]]
 
     count = len(recent)
     srv_count = len(same_service)
-    same_srv_rate = srv_count / count if count > 0 else 0
-    diff_srv_rate = (count - srv_count) / count if count > 0 else 0
-    dst_host_count = len(df[df["dst"] == row["dst"]])
-    dst_host_srv_count = len(df[(df["dst"] == row["dst"]) & (df["service"] == row["service"])])
 
-    # --- Build 41 features ---
-    features = [
-        int(row["duration"]),                  # duration
-        1 if row["protocol_type"]=="tcp" else (0 if row["protocol_type"]=="udp" else 2), # protocol_type
-        1 if row["service"]=="http" else (2 if row["service"]=="https" else 0),          # service
-        1,                                     # flag SF
-        int(row["src_bytes"]),
-        int(row["dst_bytes"]),
-        # 14 placeholders for unused features
-    ] + [0]*14 + [
-        count, srv_count,                      # statistical features
-        round(same_srv_rate,2), round(diff_srv_rate,2),
-        0.0,0.0,1.0,0.0,0.0,                   # more host/stat features
-        dst_host_count, dst_host_srv_count,
-        0.17,0.03,0.17,0.0,0.0,0.0,0.05,0.0   # final features
-    ]
+    same_srv_rate = srv_count / count if count else 0
+    diff_srv_rate = 1 - same_srv_rate if count else 0
 
-    # Ensure exactly 41 features
-    if len(features) < 41:
-        features += [0]*(41-len(features))
-    elif len(features) > 41:
-        features = features[:41]
+    dst_host_count = len([c for c in connections_map.values() if c["dst"] == conn["dst"]])
+    dst_host_srv_count = len([
+        c for c in connections_map.values()
+        if c["dst"] == conn["dst"] and c["service"] == conn["service"]
+    ])
+
+    # ---------------- Build EXACT 41 Features ----------------
+    features = [0.0] * 41
+
+    # Basic features
+    features[0] = duration
+    features[1] = protocol
+    features[2] = service
+    features[3] = flag
+    features[4] = src_bytes
+    features[5] = dst_bytes
+
+    # (6–20 remain 0: host-based / login features not available)
+
+    # Traffic stats
+    features[22] = count
+    features[23] = srv_count
+
+    features[28] = round(same_srv_rate, 2)
+    features[29] = round(diff_srv_rate, 2)
+
+    # Host-based stats
+    features[31] = dst_host_count
+    features[32] = dst_host_srv_count
+
+    # Optional debug (remove later)
+    # print("Feature length:", len(features))
 
     return features
