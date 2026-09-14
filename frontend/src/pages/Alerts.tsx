@@ -15,7 +15,24 @@ export default function Alerts() {
       console.error("Error fetching alerts:", err);
     }
   };
+  const updateAlertStatus = async (alertId, status) => {
+    try {
+      await api.patch(`/alerts/${alertId}`, {
+        status,
+      });
 
+      await fetchAlerts();
+
+    } catch (err) {
+      console.error("Error updating alert:", err);
+
+      const errorMsg =
+        err.response?.data?.error ||
+        "Unable to update alert status.";
+
+      console.error(errorMsg);
+    }
+  };
   useEffect(() => {
     fetchAlerts();
   }, []);
@@ -68,8 +85,21 @@ export default function Alerts() {
               <div className="flex gap-2">
                 {alert.status === "active" && (
                   <>
-                    <Button size="sm" variant="outline">Mark as Reviewed</Button>
-                    <Button size="sm" variant="outline">False Positive</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => updateAlertStatus(alert.id, "reviewed")}
+                    >
+                      Mark as Reviewed
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => updateAlertStatus(alert.id, "false-positive")}
+                    >
+                      False Positive
+                    </Button>
                   </>
                 )}
               </div>

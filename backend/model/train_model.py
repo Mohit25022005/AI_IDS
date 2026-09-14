@@ -1,80 +1,310 @@
-import pandas as pd
-import numpy as np
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, accuracy_score
-import joblib
 import os
+import joblib
+import pandas as pd
 
-# Paths
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    confusion_matrix
+)
+from sklearn.model_selection import train_test_split
+
+
+# ============================================================
+# PATHS
+# ============================================================
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, '..', 'data')
-train_path = os.path.join(DATA_DIR, 'KDDTrain+.txt')
-test_path = os.path.join(DATA_DIR, 'KDDTest+.txt')
+DATA_DIR = os.path.join(os.path.dirname(BASE_DIR), "data")
 
-# Column names from NSL-KDD dataset description
-columns = [
-    'duration', 'protocol_type', 'service', 'flag', 'src_bytes', 'dst_bytes',
-    'land', 'wrong_fragment', 'urgent', 'hot', 'num_failed_logins', 'logged_in',
-    'num_compromised', 'root_shell', 'su_attempted', 'num_root', 'num_file_creations',
-    'num_shells', 'num_access_files', 'num_outbound_cmds', 'is_host_login',
-    'is_guest_login', 'count', 'srv_count', 'serror_rate', 'srv_serror_rate',
-    'rerror_rate', 'srv_rerror_rate', 'same_srv_rate', 'diff_srv_rate',
-    'srv_diff_host_rate', 'dst_host_count', 'dst_host_srv_count',
-    'dst_host_same_srv_rate', 'dst_host_diff_srv_rate',
-    'dst_host_same_src_port_rate', 'dst_host_srv_diff_host_rate',
-    'dst_host_serror_rate', 'dst_host_srv_serror_rate', 'dst_host_rerror_rate',
-    'dst_host_srv_rerror_rate', 'label', 'difficulty'
+DATA_PATH = os.path.join(DATA_DIR, "live_flows.csv")
+
+MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
+PREPROCESSOR_PATH = os.path.join(BASE_DIR, "preprocessor.pkl")
+
+
+# ============================================================
+# CANONICAL LIVE FEATURES
+# ============================================================
+
+LIVE_FEATURE_COLUMNS = [
+    "duration",
+    "source_port",
+    "destination_port",
+    "forward_packets",
+    "backward_packets",
+    "forward_bytes",
+    "backward_bytes",
+    "total_packets",
+    "total_bytes",
+    "packets_per_second",
+    "bytes_per_second",
+    "mean_packet_size",
+    "min_packet_size",
+    "max_packet_size",
+    "packet_size_std",
+    "syn_count",
+    "ack_count",
+    "fin_count",
+    "rst_count",
+    "psh_count",
+    "forward_packet_ratio",
+    "backward_packet_ratio",
+    "forward_byte_ratio",
+    "backward_byte_ratio",
+    "syn_ratio",
+    "rst_ratio",
+    "protocol"
 ]
 
-print("📥 Loading data...")
-train_df = pd.read_csv(train_path, names=columns)
-test_df = pd.read_csv(test_path, names=columns)
 
-# Drop difficulty column
-train_df.drop('difficulty', axis=1, inplace=True)
-test_df.drop('difficulty', axis=1, inplace=True)
+# ============================================================
+# LOAD DATASET
+# ============================================================
 
-# Combine for consistent encoding
-combined = pd.concat([train_df, test_df])
+print("==============================================")
+print("        LIVE NETWORK IDS TRAINING")
+print("==============================================")
 
-# Label encode categorical columns
-cat_cols = ['protocol_type', 'service', 'flag']
-encoder = LabelEncoder()
-for col in cat_cols:
-    combined[col] = encoder.fit_transform(combined[col])
+print(f"\n📂 Dataset: {DATA_PATH}")
 
-# Split again
-train_df = combined.iloc[:len(train_df)]
-test_df = combined.iloc[len(train_df):]
+if not os.path.exists(DATA_PATH):
+    raise FileNotFoundError(
+        f"\n❌ Dataset not found:\n{DATA_PATH}\n\n"
+        "We have not created live_flows.csv yet.\n"
+        "Do NOT use NSL-KDD for this new 27-feature model."
+    )
 
-# Split features/labels
-X_train = train_df.drop('label', axis=1)
-y_train = train_df['label']
-X_test = test_df.drop('label', axis=1)
-y_test = test_df['label']
 
-# Simplify labels to "normal" vs "attack"
-y_train = y_train.apply(lambda x: 'normal' if x == 'normal' else 'attack')
-y_test = y_test.apply(lambda x: 'normal' if x == 'normal' else 'attack')
+df = pd.read_csv(DATA_PATH)
 
-# Scale features
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
+print(f"📊 Total samples: {len(df)}")
 
-# Train model
-print("🚀 Training Random Forest model...")
-model = RandomForestClassifier(n_estimators=100, random_state=42)
-model.fit(X_train_scaled, y_train)
 
-# Evaluate
-preds = model.predict(X_test_scaled)
-print("✅ Accuracy:", accuracy_score(y_test, preds))
-print(classification_report(y_test, preds))
+# ============================================================
+# VALIDATE DATASET
+# ============================================================
 
-# Save model + scaler
-joblib.dump(model, os.path.join(BASE_DIR, 'model.pkl'))
-joblib.dump(scaler, os.path.join(BASE_DIR, 'scaler.pkl'))
+required_columns = LIVE_FEATURE_COLUMNS + ["label"]
 
-print("💾 Model and scaler saved successfully!")
+missing_columns = [
+    column
+    for column in required_columns
+    if column not in df.columns
+]
+
+if missing_columns:
+    raise ValueError(
+        "\n❌ Dataset is missing required columns:\n"
+        + "\n".join(f"   - {column}" for column in missing_columns)
+    )
+
+
+# Remove rows with missing labels
+df = df.dropna(subset=["label"]).copy()
+
+
+# Normalize labels
+df["label"] = df["label"].astype(str).str.strip().str.lower()
+
+
+print("\n🏷️ Label distribution:")
+print(df["label"].value_counts())
+
+
+# ============================================================
+# FEATURES / LABEL
+# ============================================================
+
+X = df[LIVE_FEATURE_COLUMNS].copy()
+y = df["label"].copy()
+
+
+# ============================================================
+# DATA TYPE CLEANUP
+# ============================================================
+
+numeric_columns = [
+    column
+    for column in LIVE_FEATURE_COLUMNS
+    if column != "protocol"
+]
+
+for column in numeric_columns:
+    X[column] = pd.to_numeric(
+        X[column],
+        errors="coerce"
+    )
+
+X["protocol"] = X["protocol"].astype(str).str.lower()
+
+
+# Remove invalid rows
+valid_rows = X[numeric_columns].notna().all(axis=1)
+
+X = X.loc[valid_rows].copy()
+y = y.loc[valid_rows].copy()
+
+
+print(f"\n✅ Valid samples after cleaning: {len(X)}")
+
+
+# ============================================================
+# TRAIN / TEST SPLIT
+# ============================================================
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.20,
+    random_state=42,
+    stratify=y
+)
+
+
+print(f"🧪 Training samples: {len(X_train)}")
+print(f"🔬 Testing samples:  {len(X_test)}")
+
+
+# ============================================================
+# PREPROCESSING
+# ============================================================
+
+categorical_columns = [
+    "protocol"
+]
+
+numeric_columns = [
+    column
+    for column in LIVE_FEATURE_COLUMNS
+    if column not in categorical_columns
+]
+
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        (
+            "numeric",
+            StandardScaler(),
+            numeric_columns
+        ),
+        (
+            "categorical",
+            OneHotEncoder(
+                handle_unknown="ignore"
+            ),
+            categorical_columns
+        )
+    ]
+)
+
+
+# ============================================================
+# MODEL
+# ============================================================
+
+model = RandomForestClassifier(
+    n_estimators=300,
+    random_state=42,
+    class_weight="balanced",
+    n_jobs=-1
+)
+
+
+pipeline = Pipeline(
+    steps=[
+        ("preprocessor", preprocessor),
+        ("model", model)
+    ]
+)
+
+
+# ============================================================
+# TRAIN
+# ============================================================
+
+print("\n🚀 Training Random Forest...")
+
+pipeline.fit(
+    X_train,
+    y_train
+)
+
+
+print("✅ Training completed.")
+
+
+# ============================================================
+# EVALUATION
+# ============================================================
+
+print("\n==============================================")
+print("                EVALUATION")
+print("==============================================")
+
+predictions = pipeline.predict(X_test)
+
+
+accuracy = accuracy_score(
+    y_test,
+    predictions
+)
+
+print(f"\nAccuracy: {accuracy:.4f}")
+
+
+print("\nClassification Report:")
+print(
+    classification_report(
+        y_test,
+        predictions,
+        zero_division=0
+    )
+)
+
+
+print("\nConfusion Matrix:")
+
+labels = sorted(y.unique())
+
+cm = confusion_matrix(
+    y_test,
+    predictions,
+    labels=labels
+)
+
+print("\nLabels:")
+print(labels)
+
+print("\nMatrix:")
+print(cm)
+
+
+# ============================================================
+# SAVE MODEL
+# ============================================================
+
+joblib.dump(
+    pipeline,
+    MODEL_PATH
+)
+
+# Save the fitted preprocessor separately as well.
+joblib.dump(
+    preprocessor,
+    PREPROCESSOR_PATH
+)
+
+
+print("\n==============================================")
+print("             MODEL SAVED")
+print("==============================================")
+
+print(f"💾 Model:        {MODEL_PATH}")
+print(f"💾 Preprocessor: {PREPROCESSOR_PATH}")
+
+print("\n✅ Live IDS training pipeline is ready.")

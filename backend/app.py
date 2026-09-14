@@ -2,24 +2,58 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import joblib
 import numpy as np
+import pandas as pd
 import os
+import json
 from datetime import datetime
-import random
-
-# Import your URL conversion function
-from url_kdd import generate_kdd_features_from_url  # We'll create this function in url_kdd.py
+from url_kdd import capture_flows, build_feature_vector
 
 app = Flask(__name__)
 CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(BASE_DIR, 'model')
+ALERTS_FILE = os.path.join(
+    BASE_DIR,
+    "data",
+    "alerts.json"
+)
+# NSL-KDD feature names
+LIVE_FEATURE_COLUMNS = [
+    "duration",
+    "source_port",
+    "destination_port",
+    "forward_packets",
+    "backward_packets",
+    "forward_bytes",
+    "backward_bytes",
+    "total_packets",
+    "total_bytes",
+    "packets_per_second",
+    "bytes_per_second",
+    "mean_packet_size",
+    "min_packet_size",
+    "max_packet_size",
+    "packet_size_std",
+    "syn_count",
+    "ack_count",
+    "fin_count",
+    "rst_count",
+    "psh_count",
+    "forward_packet_ratio",
+    "backward_packet_ratio",
+    "forward_byte_ratio",
+    "backward_byte_ratio",
+    "syn_ratio",
+    "rst_ratio",
+    "protocol"
+]
 
 # ---------------- Default Settings ----------------
 settings = {
     "live_detection": True,
     "ml_model": "random-forest",
-    "sensitivity_threshold": 75,
+    "sensitivity_threshold": 55,
     "auto_retrain": False,
     "email_alerts": True,
     "desktop_notifications": True,
@@ -27,19 +61,60 @@ settings = {
 
 # ---------------- In-Memory Storage ----------------
 prediction_history = []
-alerts_data = []
+
+
+def load_alerts():
+    if not os.path.exists(ALERTS_FILE):
+        return []
+
+    try:
+        with open(ALERTS_FILE, "r", encoding="utf-8") as file:
+            data = json.load(file)
+
+        if isinstance(data, list):
+            return data
+
+    except (json.JSONDecodeError, OSError):
+        pass
+
+    return []
+
+
+def save_alerts():
+    os.makedirs(
+        os.path.dirname(ALERTS_FILE),
+        exist_ok=True
+    )
+
+    with open(
+        ALERTS_FILE,
+        "w",
+        encoding="utf-8"
+    ) as file:
+        json.dump(
+            alerts_data,
+            file,
+            indent=2
+        )
+
+
+alerts_data = load_alerts()
+
 
 # ---------------- Load Model ----------------
-def load_model(model_file='model.pkl', scaler_file='scaler.pkl'):
+def load_model(model_file='model.pkl', preprocessor_file='preprocessor.pkl'):
     model_path = os.path.join(MODEL_DIR, model_file)
-    scaler_path = os.path.join(MODEL_DIR, scaler_file)
-    if not os.path.exists(model_path) or not os.path.exists(scaler_path):
-        return None, None
-    model = joblib.load(model_path)
-    scaler = joblib.load(scaler_path)
-    return model, scaler
+    preprocessor_path = os.path.join(MODEL_DIR, preprocessor_file)
 
-model, scaler = load_model()
+    if not os.path.exists(model_path) or not os.path.exists(preprocessor_path):
+        return None, None
+
+    model = joblib.load(model_path)
+    preprocessor = joblib.load(preprocessor_path)
+
+    return model, preprocessor
+
+model, preprocessor = load_model()
 
 # ---------------- Home ----------------
 @app.route('/')
@@ -51,48 +126,89 @@ def home():
 def predict():
     global prediction_history, alerts_data
 
-    if model is None or scaler is None:
+    if model is None or preprocessor is None:
         return jsonify({"error": "Model not loaded"}), 500
 
     data = request.get_json(silent=True)
-    features_input = data.get('features')
-    url_input = data.get('url')
 
-    numeric_features = []
+    if not data:
+        return jsonify({
+            "error": "Request body must contain JSON data"
+        }), 400
 
-    if features_input:
-        # Use manual numeric input
-        if isinstance(features_input, str):
-            raw_list = [x.strip() for x in features_input.split(',')]
-        elif isinstance(features_input, list):
-            raw_list = features_input
+    features_input = data.get("features")
+
+    if features_input is None:
+        return jsonify({
+            "error": "Missing 'features' in request body"
+        }), 400
+
+    if not isinstance(features_input, dict):
+        return jsonify({
+            "error": "'features' must be a JSON object"
+        }), 400
+
+    missing_features = [
+        feature
+        for feature in LIVE_FEATURE_COLUMNS
+        if feature not in features_input
+    ]
+
+    if missing_features:
+        return jsonify({
+            "error": "Missing required features",
+            "missing_features": missing_features
+        }), 400
+
+    extra_features = [
+        feature
+        for feature in features_input
+        if feature not in LIVE_FEATURE_COLUMNS
+    ]
+
+    if extra_features:
+        return jsonify({
+            "error": "Unknown features provided",
+            "unknown_features": extra_features
+        }), 400
+
+    numeric_features = {}
+
+    for feature in LIVE_FEATURE_COLUMNS:
+        if feature == "protocol":
+            protocol = str(features_input[feature]).lower()
+
+            if protocol not in ["tcp", "udp", "other"]:
+                return jsonify({
+                    "error": "protocol must be one of: tcp, udp, other"
+                }), 400
+
+            numeric_features[feature] = protocol
+
         else:
-            return jsonify({"error": "Invalid features format"}), 400
-
-        for val in raw_list[:41]:
             try:
-                numeric_features.append(float(val))
-            except:
-                numeric_features.append(0.0)
+                numeric_features[feature] = float(
+                    features_input[feature]
+                )
+            except (TypeError, ValueError):
+                return jsonify({
+                    "error": f"Feature '{feature}' must be numeric"
+                }), 400
+                
+    # Convert validated features into the exact
+    # 27-feature DataFrame expected by the preprocessor.
+    features_df = pd.DataFrame(
+        [numeric_features],
+        columns=LIVE_FEATURE_COLUMNS
+    )
 
-    elif url_input:
-        # Use your url_kdd.py code to generate features from URL
-        try:
-            numeric_features = generate_kdd_features_from_url(url_input)
-            if len(numeric_features) != 41:
-                return jsonify({"error": f"URL conversion produced {len(numeric_features)} features; expected 41"}), 400
-        except Exception as e:
-            return jsonify({"error": f"Failed to generate features from URL: {str(e)}"}), 500
-
-    else:
-        return jsonify({"error": "Missing 'features' or 'url' in request body"}), 400
-
-    # Convert to numpy array and scale
-    features_arr = np.array(numeric_features).reshape(1, -1)
-    features_scaled = scaler.transform(features_arr)
-
-    prediction = model.predict(features_scaled)[0]
-    confidence = float(np.max(model.predict_proba(features_scaled)))
+    # Apply the same preprocessing pipeline used during training.
+    prediction = model.predict(features_df)[0]
+    confidence = float(
+        np.max(
+            model.predict_proba(features_df)
+        )
+    )
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Store prediction history
@@ -102,25 +218,128 @@ def predict():
         "confidence": confidence
     })
 
-    # Generate alert if attack
-    if prediction.lower() == "attack" and confidence * 100 >= settings["sensitivity_threshold"]:
-        alerts_data.append({
-            "id": len(alerts_data) + 1,
-            "timestamp": timestamp,
-            "type": "Intrusion Detected",
-            "severity": "high",
-            "sourceIP": "N/A",
-            "description": f"Attack detected with confidence {confidence*100:.1f}%",
-            "status": "active"
-        })
-
-    return jsonify({
-        "prediction": prediction,
-        "confidence": confidence,
+    # Generate alert for any non-normal prediction
+    if prediction.lower() != "normal" and confidence * 100 >= settings["sensitivity_threshold"]:
+       alerts_data.append({
+        "id": len(alerts_data) + 1,
         "timestamp": timestamp,
-        "features_used": numeric_features
+        "type": "Intrusion Detected",
+        "severity": "high",
+        "sourceIP": "N/A",
+        "description": f"{prediction} activity detected with confidence {confidence*100:.1f}%",
+        "status": "active"
     })
 
+    save_alerts()
+
+    return jsonify({
+        "prediction": str(prediction),
+        "confidence": confidence,
+        "timestamp": timestamp,
+        "features_used": {
+            feature: numeric_features[feature]
+            for feature in LIVE_FEATURE_COLUMNS
+        }
+    })
+
+# ---------------- Live Flow Capture + Prediction ----------------
+@app.route("/capture", methods=["POST"])
+def capture_network_flows():
+    try:
+        data = request.get_json(silent=True) or {}
+
+        capture_time = float(
+            data.get("capture_time", 8)
+        )
+
+        if capture_time <= 0 or capture_time > 60:
+            return jsonify({
+                "error": "capture_time must be between 0 and 60 seconds"
+            }), 400
+
+        if model is None:
+            return jsonify({
+                "error": "ML model is not loaded"
+            }), 500
+
+        flows = capture_flows(
+            capture_time=capture_time
+        )
+
+        detected_flows = []
+
+        for flow in flows:
+
+            # Convert captured flow into the exact
+            # 27-feature format expected by the model
+            feature_vector = build_feature_vector(flow)
+
+            features_df = pd.DataFrame(
+                [feature_vector],
+                columns=LIVE_FEATURE_COLUMNS
+            )
+
+            # Predict using the saved Pipeline.
+            # The Pipeline handles preprocessing internally.
+            prediction = model.predict(features_df)[0]
+
+            confidence = float(
+                np.max(
+                    model.predict_proba(features_df)
+                )
+            )
+
+            timestamp = datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            # Store prediction in monitoring history
+            prediction_history.append({
+                "timestamp": timestamp,
+                "prediction": str(prediction),
+                "confidence": confidence
+            })
+
+            # Create an alert for non-normal traffic
+            # when confidence crosses the configured threshold
+            if (
+                str(prediction).lower() != "normal"
+                and confidence * 100 >= settings["sensitivity_threshold"]
+            ):
+                alerts_data.append({
+                    "id": len(alerts_data) + 1,
+                    "timestamp": timestamp,
+                    "type": "Intrusion Detected",
+                    "severity": "high",
+                    "sourceIP": flow.src_ip,
+                    "description": (
+                        f"{prediction} activity detected with "
+                        f"confidence {confidence * 100:.1f}%"
+                    ),
+                    "status": "active"
+                })
+
+                save_alerts()
+
+            detected_flows.append({
+                "features": feature_vector,
+                "prediction": str(prediction),
+                "confidence": confidence,
+                "timestamp": timestamp
+            })
+
+        return jsonify({
+            "message": "Network capture and detection completed",
+            "flows_captured": len(detected_flows),
+            "flows": detected_flows
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "error": f"Network capture failed: {str(e)}"
+        }), 500
+        
+        
 # ---------------- Monitor History ----------------
 @app.route("/monitor/history")
 def monitor_history():
@@ -130,6 +349,38 @@ def monitor_history():
 @app.route("/alerts")
 def get_alerts():
     return jsonify(alerts_data[-50:])
+
+@app.route("/alerts/<int:alert_id>", methods=["PATCH"])
+def update_alert(alert_id):
+    data = request.get_json(silent=True) or {}
+    new_status = data.get("status")
+
+    allowed_statuses = {
+        "active",
+        "reviewed",
+        "false-positive"
+    }
+
+    if new_status not in allowed_statuses:
+        return jsonify({
+            "error": "Invalid alert status",
+            "allowed_statuses": list(allowed_statuses)
+        }), 400
+
+    for alert in alerts_data:
+        if alert["id"] == alert_id:
+            alert["status"] = new_status
+
+            save_alerts()
+
+            return jsonify({
+                "message": "Alert status updated successfully",
+                "alert": alert
+            }), 200
+
+    return jsonify({
+        "error": f"Alert {alert_id} not found"
+    }), 404
 
 # ---------------- Settings ----------------
 @app.route('/settings', methods=['GET'])
@@ -148,19 +399,29 @@ def update_settings():
 # ---------------- Model Management ----------------
 @app.route('/model/retrain', methods=['POST'])
 def retrain_model():
-    return jsonify({"message": "Model retraining started (simulation)"}), 200
-
+    return jsonify({
+        "error": "Model retraining is not implemented yet"
+    }), 501
+    
 @app.route('/model/reload', methods=['POST'])
 def reload_model():
-    global model, scaler
-    model, scaler = load_model()
-    if model is None or scaler is None:
-        return jsonify({"error": "Failed to reload model"}), 500
-    return jsonify({"message": "Model reloaded successfully"}), 200
+    global model, preprocessor
 
+    model, preprocessor = load_model()
+
+    if model is None or preprocessor is None:
+        return jsonify({
+            "error": "Failed to reload model"
+        }), 500
+
+    return jsonify({
+        "message": "Model reloaded successfully"
+    }), 200
+    
 @app.route('/model/reset', methods=['POST'])
 def reset_model_defaults():
-    global settings, model, scaler
+    global settings, model, preprocessor
+
     settings = {
         "live_detection": True,
         "ml_model": "random-forest",
@@ -169,31 +430,62 @@ def reset_model_defaults():
         "email_alerts": True,
         "desktop_notifications": True,
     }
-    model, scaler = load_model()
-    return jsonify({"message": "Model and settings reset to defaults", "settings": settings}), 200
+
+    model, preprocessor = load_model()
+
+    if model is None or preprocessor is None:
+        return jsonify({
+            "error": "Failed to reload model during reset"
+        }), 500
+
+    return jsonify({
+        "message": "Model and settings reset to defaults",
+        "settings": settings
+    }), 200
 
 # ---------------- Insights -----------------
 @app.route("/insights/metrics")
 def insights_metrics():
     return jsonify({
-        "accuracy": 98.7,
-        "precision": 97.3,
-        "recall": 96.8,
-        "f1": 97.0
+        "accuracy": 98.08,
+        "precision": 98.00,
+        "recall": 98.00,
+        "f1": 98.00,
+        "evaluation_type": "independent_test_set",
+        "test_samples": 52
     })
 
 @app.route("/insights/confusion")
 def insights_confusion():
-    return jsonify([
-        [450, 12],
-        [15, 523]
-    ])
+    return jsonify({
+        "labels": ["normal", "probe"],
+        "matrix": [
+            [24, 1],
+            [0, 27]
+        ]
+    })
 
 @app.route("/insights/traffic")
 def insights_traffic():
+    normal_count = sum(
+        1 for item in prediction_history
+        if str(item["prediction"]).lower() == "normal"
+    )
+
+    probe_count = sum(
+        1 for item in prediction_history
+        if str(item["prediction"]).lower() == "probe"
+    )
+
     return jsonify([
-        {"name": "Normal", "count": 470},
-        {"name": "Attack", "count": 550}
+        {
+            "name": "Normal",
+            "count": normal_count
+        },
+        {
+            "name": "Probe",
+            "count": probe_count
+        }
     ])
 
 # ---------------- Run App ----------------

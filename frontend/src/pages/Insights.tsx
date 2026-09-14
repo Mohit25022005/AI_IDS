@@ -17,7 +17,7 @@ export default function Insights() {
 
   const [trafficData, setTrafficData] = useState([
     { name: "Normal", count: 0 },
-    { name: "Attack", count: 0 },
+    { name: "Probe", count: 0 },
   ]);
 
   useEffect(() => {
@@ -29,7 +29,7 @@ export default function Insights() {
 
         const confusionRes = await fetch("http://127.0.0.1:5000/insights/confusion");
         const confusionData = await confusionRes.json();
-        setConfusionMatrix(confusionData);
+        setConfusionMatrix(confusionData.matrix);
 
         const trafficRes = await fetch("http://127.0.0.1:5000/insights/traffic");
         const trafficData = await trafficRes.json();
@@ -51,7 +51,9 @@ export default function Insights() {
       <Card className="border-border bg-card/50 backdrop-blur-sm">
         <CardHeader>
           <CardTitle className="text-foreground">Model Performance</CardTitle>
-          <p className="text-sm text-muted-foreground mt-1">Real-time ML model metrics</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Independent test-set evaluation
+          </p>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -84,7 +86,9 @@ export default function Insights() {
           <div className="space-y-4">
             <div className="grid grid-cols-3 gap-2 text-sm">
               <div></div>
-              <div className="text-center font-medium text-muted-foreground">Predicted Normal</div>
+              <div className="text-center font-medium text-muted-foreground">
+                Predicted Probe
+              </div>
               <div className="text-center font-medium text-muted-foreground">Predicted Malicious</div>
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -97,7 +101,9 @@ export default function Insights() {
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <div className="flex items-center font-medium text-muted-foreground text-sm">Actual Malicious</div>
+              <div className="flex items-center font-medium text-muted-foreground text-sm">
+                Actual Probe
+              </div>
               <div className="bg-destructive/20 border border-destructive/30 rounded-lg p-6 text-center">
                 <span className="text-2xl font-bold text-foreground">{confusionMatrix[1][0]}</span>
               </div>

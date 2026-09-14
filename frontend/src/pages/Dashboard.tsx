@@ -32,9 +32,13 @@ export default function Dashboard() {
       // Compute metrics
       const packetsAnalyzed = history.length;
       const threatsDetected = alerts.length;
-      const attacks = history.filter(h => h.prediction === "attack").length;
+      const probes = history.filter(
+        h => h.prediction?.toLowerCase() === "probe"
+      ).length;
       const accuracy =
-        history.length > 0 ? ((packetsAnalyzed - attacks) / packetsAnalyzed) * 100 : 0;
+        history.length > 0
+          ? ((packetsAnalyzed - probes) / packetsAnalyzed) * 100
+          : 0;
       const systemStatus = threatsDetected > 0 ? "Under Attack" : "Safe";
 
       setMetrics({
@@ -49,8 +53,16 @@ export default function Dashboard() {
 
       // Traffic chart
       setTrafficData([
-        { name: "Normal", count: history.filter(h => h.prediction === "normal").length },
-        { name: "Attack", count: attacks },
+        {
+          name: "Normal",
+          count: history.filter(
+            h => h.prediction?.toLowerCase() === "normal"
+          ).length,
+        },
+        {
+          name: "Probe",
+          count: probes,
+        },
       ]);
 
       // Threat distribution

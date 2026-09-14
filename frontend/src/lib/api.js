@@ -7,9 +7,16 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// Example: Send feature array to backend
+// Send 27 live-flow features to the backend
 export const predictIntrusion = async (features) => {
-  const response = await api.post("/predict", { features });
+  if (!features || typeof features !== "object" || Array.isArray(features)) {
+    throw new Error("Features must be provided as an object");
+  }
+
+  const response = await api.post("/predict", {
+    features,
+  });
+
   return response.data;
 };
 
