@@ -1,8 +1,8 @@
 {
   "live_detection": true,
-  "ml_model": "random-forest",
+  "ml_model": "hybrid",
   "sensitivity_threshold": 75,
   "auto_retrain": false,
-  "email_alerts": false,
+  "email_alerts": true,
   "desktop_notifications": false
 }

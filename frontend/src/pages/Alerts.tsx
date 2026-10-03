@@ -10,7 +10,7 @@ export default function Alerts() {
   const fetchAlerts = async () => {
     try {
       const res = await api.get("/alerts");
-      setAlerts(res.data);
+      setAlerts(res.data.alerts ?? []);
     } catch (err) {
       console.error("Error fetching alerts:", err);
     }

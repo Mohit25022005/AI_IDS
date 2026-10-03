@@ -1,0 +1,14 @@
+{
+  "run_timestamp": "2026-10-03T11-17-03",
+  "script": "C:\\Users\\mohit\\AI_IDS\\AI_IDS\\backend\\model\\train_model.py",
+  "train_data": "C:\\Users\\mohit\\AI_IDS\\AI_IDS\\backend\\data\\live_flows.csv",
+  "test_data": "C:\\Users\\mohit\\AI_IDS\\AI_IDS\\backend\\data\\test_flows.csv",
+  "train_md5": "ee95f293a074f96ff22489f843f20af1",
+  "test_md5": "e67f324c3f098999a5d4995b16f78308",
+  "feature_schema_version": "v2",
+  "random_seed": 42,
+  "classes": [
+    "normal",
+    "probe"
+  ]
+}

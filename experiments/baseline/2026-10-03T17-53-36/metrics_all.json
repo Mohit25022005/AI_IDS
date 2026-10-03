@@ -1,0 +1,168 @@
+{
+  "generated_at": "2026-10-03T17:53:36.663862Z",
+  "feature_schema_version": "v2",
+  "random_seed": 42,
+  "n_train_samples": 565,
+  "n_test_samples": 252,
+  "classes": [
+    "dos",
+    "normal",
+    "probe",
+    "r2l",
+    "u2r"
+  ],
+  "class_distribution_train": {
+    "dos": 200,
+    "r2l": 150,
+    "u2r": 100,
+    "probe": 60,
+    "normal": 55
+  },
+  "class_distribution_test": {
+    "dos": 90,
+    "r2l": 65,
+    "u2r": 45,
+    "probe": 27,
+    "normal": 25
+  },
+  "train_dataset_md5": "a560a471d6a3ce2494287d2d3347e6d3",
+  "test_dataset_md5": "2acfa3bbbbcb8204f5dbde9aace31402",
+  "model_comparison": [
+    {
+      "model": "random_forest",
+      "accuracy": 0.9802,
+      "precision_macro": 0.9715,
+      "recall_macro": 0.96,
+      "f1_macro": 0.9629,
+      "f1_weighted": 0.9795,
+      "roc_auc": null,
+      "pr_auc": null,
+      "latency_ms_per_sample": 0.3754,
+      "training_time_s": 0.291
+    },
+    {
+      "model": "svm",
+      "accuracy": 0.996,
+      "precision_macro": 0.9957,
+      "recall_macro": 0.992,
+      "f1_macro": 0.9937,
+      "f1_weighted": 0.996,
+      "roc_auc": null,
+      "pr_auc": null,
+      "latency_ms_per_sample": 0.023,
+      "training_time_s": 0.016
+    },
+    {
+      "model": "neural_network",
+      "accuracy": 0.996,
+      "precision_macro": 0.9957,
+      "recall_macro": 0.992,
+      "f1_macro": 0.9937,
+      "f1_weighted": 0.996,
+      "roc_auc": null,
+      "pr_auc": null,
+      "latency_ms_per_sample": 0.0519,
+      "training_time_s": 0.527
+    },
+    {
+      "model": "hybrid",
+      "accuracy": 0.996,
+      "precision_macro": 0.9957,
+      "recall_macro": 0.992,
+      "f1_macro": 0.9937,
+      "f1_weighted": 0.996,
+      "roc_auc": null,
+      "pr_auc": null,
+      "latency_ms_per_sample": 0.5351,
+      "training_time_s": 0.934
+    }
+  ],
+  "default_model": "random_forest",
+  "current_metrics": {
+    "split": "independent_test",
+    "n_samples": 252,
+    "accuracy": 0.9802,
+    "precision_macro": 0.9715,
+    "recall_macro": 0.96,
+    "f1_macro": 0.9629,
+    "f1_weighted": 0.9795,
+    "roc_auc": null,
+    "pr_auc": null,
+    "per_class": {
+      "dos": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 90
+      },
+      "normal": {
+        "precision": 1.0,
+        "recall": 0.8,
+        "f1": 0.8889,
+        "support": 25
+      },
+      "probe": {
+        "precision": 0.9,
+        "recall": 1.0,
+        "f1": 0.9474,
+        "support": 27
+      },
+      "r2l": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 65
+      },
+      "u2r": {
+        "precision": 0.9574,
+        "recall": 1.0,
+        "f1": 0.9783,
+        "support": 45
+      }
+    },
+    "confusion_matrix": [
+      [
+        90,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        20,
+        3,
+        0,
+        2
+      ],
+      [
+        0,
+        0,
+        27,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        65,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        45
+      ]
+    ],
+    "confusion_matrix_labels": [
+      "dos",
+      "normal",
+      "probe",
+      "r2l",
+      "u2r"
+    ]
+  }
+}

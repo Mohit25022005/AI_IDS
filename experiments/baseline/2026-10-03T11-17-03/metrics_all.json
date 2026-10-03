@@ -1,0 +1,111 @@
+{
+  "generated_at": "2026-10-03T11:17:03.874959Z",
+  "feature_schema_version": "v2",
+  "random_seed": 42,
+  "n_train_samples": 115,
+  "n_test_samples": 52,
+  "classes": [
+    "normal",
+    "probe"
+  ],
+  "class_distribution_train": {
+    "probe": 60,
+    "normal": 55
+  },
+  "class_distribution_test": {
+    "probe": 27,
+    "normal": 25
+  },
+  "train_dataset_md5": "ee95f293a074f96ff22489f843f20af1",
+  "test_dataset_md5": "e67f324c3f098999a5d4995b16f78308",
+  "model_comparison": [
+    {
+      "model": "random_forest",
+      "accuracy": 0.9808,
+      "precision_macro": 0.9821,
+      "recall_macro": 0.98,
+      "f1_macro": 0.9807,
+      "f1_weighted": 0.9807,
+      "roc_auc": 1.0,
+      "pr_auc": 1.0,
+      "latency_ms_per_sample": 1.7851,
+      "training_time_s": 0.263
+    },
+    {
+      "model": "svm",
+      "accuracy": 1.0,
+      "precision_macro": 1.0,
+      "recall_macro": 1.0,
+      "f1_macro": 1.0,
+      "f1_weighted": 1.0,
+      "roc_auc": 1.0,
+      "pr_auc": 1.0,
+      "latency_ms_per_sample": 0.0788,
+      "training_time_s": 0.005
+    },
+    {
+      "model": "neural_network",
+      "accuracy": 0.9615,
+      "precision_macro": 0.963,
+      "recall_macro": 0.963,
+      "f1_macro": 0.9615,
+      "f1_weighted": 0.9615,
+      "roc_auc": 0.997,
+      "pr_auc": 0.9974,
+      "latency_ms_per_sample": 0.1476,
+      "training_time_s": 0.085
+    },
+    {
+      "model": "hybrid",
+      "accuracy": 1.0,
+      "precision_macro": 1.0,
+      "recall_macro": 1.0,
+      "f1_macro": 1.0,
+      "f1_weighted": 1.0,
+      "roc_auc": 1.0,
+      "pr_auc": 1.0,
+      "latency_ms_per_sample": 2.0843,
+      "training_time_s": 0.419
+    }
+  ],
+  "default_model": "random_forest",
+  "current_metrics": {
+    "split": "independent_test",
+    "n_samples": 52,
+    "accuracy": 0.9808,
+    "precision_macro": 0.9821,
+    "recall_macro": 0.98,
+    "f1_macro": 0.9807,
+    "f1_weighted": 0.9807,
+    "roc_auc": 1.0,
+    "pr_auc": 1.0,
+    "per_class": {
+      "normal": {
+        "precision": 1.0,
+        "recall": 0.96,
+        "f1": 0.9796,
+        "support": 25
+      },
+      "probe": {
+        "precision": 0.9643,
+        "recall": 1.0,
+        "f1": 0.9818,
+        "support": 27
+      }
+    },
+    "confusion_matrix": [
+      [
+        24,
+        1
+      ],
+      [
+        0,
+        27
+      ]
+    ],
+    "confusion_matrix_labels": [
+      "normal",
+      "probe"
+    ]
+  }
+}

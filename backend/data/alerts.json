@@ -1548,5 +1548,39 @@
     "model_used": "random-forest",
     "description": "Probe activity detected. Confidence: 79.3%. TCP traffic from 127.0.0.1:62876 to 127.0.0.1:8034.",
     "status": "active"
+  },
+  {
+    "id": "368e559c-f00c-4077-b524-7c97e534adec",
+    "event_id": "6e9fed4d-dc92-47c4-a639-9ef09933d854",
+    "timestamp": "2026-10-03 15:11:26",
+    "type": "Probe Detection",
+    "severity": "medium",
+    "sourceIP": "N/A",
+    "destinationIP": "N/A",
+    "sourcePort": 50000,
+    "destinationPort": 8000,
+    "protocol": "tcp",
+    "confidence": 63.0,
+    "latency_ms": 70.2861,
+    "model_used": "random-forest",
+    "description": "Probe activity detected. Confidence: 63.0%. Protocol: TCP, destination port: 8000.",
+    "status": "active"
+  },
+  {
+    "id": "b764760c-a103-48b0-8a90-49b9349c5316",
+    "event_id": "3f7f1fa7-57b7-4df6-b39e-dcf86f9c9878",
+    "timestamp": "2026-10-03 15:11:42",
+    "type": "Probe Detection",
+    "severity": "medium",
+    "sourceIP": "N/A",
+    "destinationIP": "N/A",
+    "sourcePort": 50000,
+    "destinationPort": 8000,
+    "protocol": "tcp",
+    "confidence": 63.0,
+    "latency_ms": 54.7823,
+    "model_used": "random-forest",
+    "description": "Probe activity detected. Confidence: 63.0%. Protocol: TCP, destination port: 8000.",
+    "status": "active"
   }
 ]

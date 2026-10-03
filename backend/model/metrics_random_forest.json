@@ -1,0 +1,262 @@
+{
+  "model_name": "random_forest",
+  "algorithm": "random_forest",
+  "feature_schema_version": "v2",
+  "feature_columns": [
+    "duration",
+    "source_port",
+    "destination_port",
+    "forward_packets",
+    "backward_packets",
+    "forward_bytes",
+    "backward_bytes",
+    "total_packets",
+    "total_bytes",
+    "packets_per_second",
+    "bytes_per_second",
+    "mean_packet_size",
+    "min_packet_size",
+    "max_packet_size",
+    "packet_size_std",
+    "syn_count",
+    "ack_count",
+    "fin_count",
+    "rst_count",
+    "psh_count",
+    "forward_packet_ratio",
+    "backward_packet_ratio",
+    "forward_byte_ratio",
+    "backward_byte_ratio",
+    "syn_ratio",
+    "rst_ratio",
+    "protocol"
+  ],
+  "n_features": 27,
+  "classes": [
+    "dos",
+    "normal",
+    "probe",
+    "r2l",
+    "u2r"
+  ],
+  "hyperparameters": {
+    "n_estimators": 300,
+    "max_depth": null,
+    "class_weight": "balanced",
+    "random_state": 42
+  },
+  "random_seed": 42,
+  "training_timestamp": "2026-10-03T17:53:33.275201Z",
+  "training_time_seconds": 0.291,
+  "n_train_samples": 452,
+  "n_val_samples": 113,
+  "n_test_samples": 252,
+  "train_dataset_md5": "a560a471d6a3ce2494287d2d3347e6d3",
+  "test_dataset_md5": "2acfa3bbbbcb8204f5dbde9aace31402",
+  "val_inference_latency_ms_per_sample": 0.8259,
+  "test_inference_latency_ms_per_sample": 0.3754,
+  "validation": {
+    "split": "validation",
+    "n_samples": 113,
+    "accuracy": 1.0,
+    "precision_macro": 1.0,
+    "recall_macro": 1.0,
+    "f1_macro": 1.0,
+    "f1_weighted": 1.0,
+    "roc_auc": null,
+    "pr_auc": null,
+    "per_class": {
+      "dos": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 40
+      },
+      "normal": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 11
+      },
+      "probe": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 12
+      },
+      "r2l": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 30
+      },
+      "u2r": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 20
+      }
+    },
+    "confusion_matrix": [
+      [
+        40,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        11,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        12,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        30,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        20
+      ]
+    ],
+    "confusion_matrix_labels": [
+      "dos",
+      "normal",
+      "probe",
+      "r2l",
+      "u2r"
+    ]
+  },
+  "independent_test": {
+    "split": "independent_test",
+    "n_samples": 252,
+    "accuracy": 0.9802,
+    "precision_macro": 0.9715,
+    "recall_macro": 0.96,
+    "f1_macro": 0.9629,
+    "f1_weighted": 0.9795,
+    "roc_auc": null,
+    "pr_auc": null,
+    "per_class": {
+      "dos": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 90
+      },
+      "normal": {
+        "precision": 1.0,
+        "recall": 0.8,
+        "f1": 0.8889,
+        "support": 25
+      },
+      "probe": {
+        "precision": 0.9,
+        "recall": 1.0,
+        "f1": 0.9474,
+        "support": 27
+      },
+      "r2l": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 65
+      },
+      "u2r": {
+        "precision": 0.9574,
+        "recall": 1.0,
+        "f1": 0.9783,
+        "support": 45
+      }
+    },
+    "confusion_matrix": [
+      [
+        90,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        20,
+        3,
+        0,
+        2
+      ],
+      [
+        0,
+        0,
+        27,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        65,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        45
+      ]
+    ],
+    "confusion_matrix_labels": [
+      "dos",
+      "normal",
+      "probe",
+      "r2l",
+      "u2r"
+    ]
+  },
+  "feature_importances": [
+    0.07339363371289193,
+    0.003438618318717525,
+    0.01898699029252294,
+    0.06718131330078318,
+    0.018463198079489356,
+    0.0799962781926585,
+    0.016374695375502877,
+    0.043218591750501495,
+    0.030294609666539393,
+    0.06608041126733823,
+    0.04985320564844062,
+    0.07158439620165864,
+    0.030761308298360514,
+    0.06422236177886591,
+    0.03163684484124443,
+    0.0006720599692948127,
+    0.009452225580311172,
+    0.00046771774466416023,
+    0.0019333453082103003,
+    0.011840607851590261,
+    0.08051823771713083,
+    0.09266472814187998,
+    0.03431037463584253,
+    0.02902795189864472,
+    0.009356141075036094,
+    0.0530741972066074,
+    0.006921918031764257,
+    0.004274038113507928
+  ]
+}

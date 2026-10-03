@@ -1,0 +1,235 @@
+{
+  "model_name": "svm",
+  "algorithm": "svm",
+  "feature_schema_version": "v2",
+  "feature_columns": [
+    "duration",
+    "source_port",
+    "destination_port",
+    "forward_packets",
+    "backward_packets",
+    "forward_bytes",
+    "backward_bytes",
+    "total_packets",
+    "total_bytes",
+    "packets_per_second",
+    "bytes_per_second",
+    "mean_packet_size",
+    "min_packet_size",
+    "max_packet_size",
+    "packet_size_std",
+    "syn_count",
+    "ack_count",
+    "fin_count",
+    "rst_count",
+    "psh_count",
+    "forward_packet_ratio",
+    "backward_packet_ratio",
+    "forward_byte_ratio",
+    "backward_byte_ratio",
+    "syn_ratio",
+    "rst_ratio",
+    "protocol"
+  ],
+  "n_features": 27,
+  "classes": [
+    "dos",
+    "normal",
+    "probe",
+    "r2l",
+    "u2r"
+  ],
+  "hyperparameters": {
+    "kernel": "rbf",
+    "C": 10.0,
+    "gamma": "scale",
+    "probability": true,
+    "class_weight": "balanced",
+    "random_state": 42
+  },
+  "random_seed": 42,
+  "training_timestamp": "2026-10-03T17:53:33.397841Z",
+  "training_time_seconds": 0.016,
+  "n_train_samples": 452,
+  "n_val_samples": 113,
+  "n_test_samples": 252,
+  "train_dataset_md5": "a560a471d6a3ce2494287d2d3347e6d3",
+  "test_dataset_md5": "2acfa3bbbbcb8204f5dbde9aace31402",
+  "val_inference_latency_ms_per_sample": 0.0503,
+  "test_inference_latency_ms_per_sample": 0.023,
+  "validation": {
+    "split": "validation",
+    "n_samples": 113,
+    "accuracy": 0.9912,
+    "precision_macro": 0.9905,
+    "recall_macro": 0.9818,
+    "f1_macro": 0.9856,
+    "f1_weighted": 0.991,
+    "roc_auc": null,
+    "pr_auc": null,
+    "per_class": {
+      "dos": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 40
+      },
+      "normal": {
+        "precision": 1.0,
+        "recall": 0.9091,
+        "f1": 0.9524,
+        "support": 11
+      },
+      "probe": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 12
+      },
+      "r2l": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 30
+      },
+      "u2r": {
+        "precision": 0.9524,
+        "recall": 1.0,
+        "f1": 0.9756,
+        "support": 20
+      }
+    },
+    "confusion_matrix": [
+      [
+        40,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        10,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        12,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        30,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        20
+      ]
+    ],
+    "confusion_matrix_labels": [
+      "dos",
+      "normal",
+      "probe",
+      "r2l",
+      "u2r"
+    ]
+  },
+  "independent_test": {
+    "split": "independent_test",
+    "n_samples": 252,
+    "accuracy": 0.996,
+    "precision_macro": 0.9957,
+    "recall_macro": 0.992,
+    "f1_macro": 0.9937,
+    "f1_weighted": 0.996,
+    "roc_auc": null,
+    "pr_auc": null,
+    "per_class": {
+      "dos": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 90
+      },
+      "normal": {
+        "precision": 1.0,
+        "recall": 0.96,
+        "f1": 0.9796,
+        "support": 25
+      },
+      "probe": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 27
+      },
+      "r2l": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 65
+      },
+      "u2r": {
+        "precision": 0.9783,
+        "recall": 1.0,
+        "f1": 0.989,
+        "support": 45
+      }
+    },
+    "confusion_matrix": [
+      [
+        90,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        24,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        27,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        65,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        45
+      ]
+    ],
+    "confusion_matrix_labels": [
+      "dos",
+      "normal",
+      "probe",
+      "r2l",
+      "u2r"
+    ]
+  },
+  "feature_importances": null
+}
