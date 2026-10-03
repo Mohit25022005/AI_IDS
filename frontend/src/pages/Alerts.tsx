@@ -34,7 +34,14 @@ export default function Alerts() {
     }
   };
   useEffect(() => {
+    // Initial load
     fetchAlerts();
+
+    // Refresh alerts every 3 seconds
+    const interval = setInterval(fetchAlerts, 3000);
+
+    // Cleanup interval when leaving the page
+    return () => clearInterval(interval);
   }, []);
 
   const getSeverityColor = (severity) => {
@@ -78,9 +85,50 @@ export default function Alerts() {
             </div>
             <p className="text-sm text-foreground mb-3">{alert.description}</p>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Source:</span>
-                <code className="text-xs font-mono text-primary bg-primary/10 px-2 py-1 rounded">{alert.sourceIP}</code>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  Source:
+                </span>
+
+                <code className="text-xs font-mono text-primary bg-primary/10 px-2 py-1 rounded">
+                  {alert.sourceIP || "N/A"}
+                </code>
+
+                <span className="text-xs text-muted-foreground">
+                  →
+                </span>
+
+                <span className="text-xs text-muted-foreground">
+                  Destination:
+                </span>
+
+                <code className="text-xs font-mono text-primary bg-primary/10 px-2 py-1 rounded">
+                  {alert.destinationIP || "N/A"}
+                </code>
+
+                {alert.sourcePort !== undefined && (
+                  <span className="text-xs text-muted-foreground">
+                    Port:
+                    <code className="ml-1 font-mono text-foreground">
+                      {alert.sourcePort} → {alert.destinationPort}
+                    </code>
+                  </span>
+                )}
+
+                {alert.protocol && (
+                  <Badge variant="outline">
+                    {alert.protocol.toUpperCase()}
+                  </Badge>
+                )}
+
+                {alert.confidence !== undefined && (
+                  <span className="text-xs text-muted-foreground">
+                    Confidence:
+                    <span className="ml-1 font-semibold text-foreground">
+                      {alert.confidence}%
+                    </span>
+                  </span>
+                )}
               </div>
               <div className="flex gap-2">
                 {alert.status === "active" && (

@@ -2,11 +2,12 @@ import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { api, predictIntrusion } from "@/lib/api";
+import { api, predictIntrusion } from "@/lib/api.ts";
 
 export default function Monitor() {
   const [features, setFeatures] = useState({});
   const [capturing, setCapturing] = useState(false);
+  const [captureMode, setCaptureMode] = useState("normal");
   const [captureResults, setCaptureResults] = useState([]);
   const [monitoring, setMonitoring] = useState(false);
   const [result, setResult] = useState(null);
@@ -53,7 +54,10 @@ export default function Monitor() {
   const fetchHistory = async () => {
     try {
       const res = await api.get("/monitor/history");
-      setHistory(res.data);
+
+      // Backend returns an object containing the latest records
+      // and aggregate statistics.
+      setHistory(res.data.records || []);
     } catch (err) {
       console.error("Error fetching history:", err);
     }
@@ -115,6 +119,7 @@ export default function Monitor() {
 
       const response = await api.post("/capture", {
         capture_time: 5,
+        mode: captureMode,
       });
 
       const flows = response.data?.flows || [];
@@ -276,7 +281,21 @@ export default function Monitor() {
           ))}
         </div>
       </div>
+      <div className="flex items-center gap-3 mt-4">
+        <label className="text-sm font-medium">
+          Capture Mode
+        </label>
 
+        <select
+          value={captureMode}
+          onChange={(e) => setCaptureMode(e.target.value)}
+          disabled={capturing || monitoring}
+          className="px-3 py-2 rounded-md border border-border bg-background text-foreground"
+        >
+          <option value="normal">Normal Traffic</option>
+          <option value="probe">Controlled Probe Test</option>
+        </select>
+      </div>
       <div className="flex flex-wrap gap-3 mt-4">
         <Button onClick={handlePredict}>
           Predict Manual Features
@@ -295,7 +314,11 @@ export default function Monitor() {
           onClick={handleCapture}
           disabled={capturing || monitoring}
         >
-          {capturing ? "Capturing..." : "Capture & Detect"}
+          {capturing
+            ? "Capturing..."
+            : captureMode === "probe"
+              ? "Capture Probe"
+              : "Capture Normal"}
         </Button>
 
         <Button
@@ -330,24 +353,78 @@ export default function Monitor() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Timestamp</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Prediction</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Confidence</th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
+                Timestamp
+              </th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
+                Source
+              </th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
+                Destination
+              </th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
+                Protocol
+              </th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
+                Prediction
+              </th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
+                Confidence
+              </th>
             </tr>
           </thead>
           <tbody>
             {history.map((item, idx) => (
-              <tr key={idx} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                <td className="py-3 px-4 text-sm text-foreground">{item.timestamp}</td>
+              <tr
+                key={idx}
+                className="border-b border-border/50 hover:bg-secondary/30 transition-colors"
+              >
+                {/* Timestamp */}
+                <td className="py-3 px-4 text-sm text-foreground">
+                  {item.timestamp}
+                </td>
+
+                {/* Source */}
+                <td className="py-3 px-4 text-sm">
+                  <code className="font-mono text-primary">
+                    {item.sourceIP || "N/A"}
+                    {item.sourcePort !== undefined
+                      ? `:${item.sourcePort}`
+                      : ""}
+                  </code>
+                </td>
+
+                {/* Destination */}
+                <td className="py-3 px-4 text-sm">
+                  <code className="font-mono text-primary">
+                    {item.destinationIP || "N/A"}
+                    {item.destinationPort !== undefined
+                      ? `:${item.destinationPort}`
+                      : ""}
+                  </code>
+                </td>
+
+                {/* Protocol */}
+                <td className="py-3 px-4 text-sm uppercase">
+                  {item.protocol || "N/A"}
+                </td>
+
+                {/* Prediction */}
                 <td
                   className={`py-3 px-4 text-sm font-bold ${item.prediction?.toLowerCase() === "normal"
                     ? "text-green-600"
                     : "text-red-600"
                     }`}
                 >
-                  {item.prediction.toUpperCase()}
+                  {item.prediction?.toUpperCase() || "UNKNOWN"}
                 </td>
-                <td className="py-3 px-4 text-sm text-foreground">{(item.confidence * 100).toFixed(1)}%</td>
+
+                {/* Confidence */}
+                <td className="py-3 px-4 text-sm text-foreground">
+                  {typeof item.confidence === "number"
+                    ? `${item.confidence}%`
+                    : "N/A"}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -385,7 +462,7 @@ export default function Monitor() {
                 key={`${flow.timestamp}-${index}`}
                 className="rounded-lg border p-4"
               >
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <p className="font-medium">
                       Flow {index + 1}
@@ -394,6 +471,49 @@ export default function Monitor() {
                     <p className="text-sm text-muted-foreground">
                       {flow.timestamp}
                     </p>
+
+                    <div className="mt-3 space-y-1 text-sm">
+                      <p>
+                        <span className="text-muted-foreground">
+                          Source Port:
+                        </span>{" "}
+                        <code className="font-mono">
+                          {flow.features?.source_port ?? "N/A"}
+                        </code>
+                      </p>
+
+                      <p>
+                        <span className="text-muted-foreground">
+                          Destination Port:
+                        </span>{" "}
+                        <code className="font-mono">
+                          {flow.features?.destination_port ?? "N/A"}
+                        </code>
+                      </p>
+
+                      <p>
+                        <span className="text-muted-foreground">
+                          Protocol:
+                        </span>{" "}
+                        <span className="uppercase">
+                          {flow.features?.protocol || "N/A"}
+                        </span>
+                      </p>
+
+                      <p>
+                        <span className="text-muted-foreground">
+                          Total Packets:
+                        </span>{" "}
+                        {flow.features?.total_packets ?? "N/A"}
+                      </p>
+
+                      <p>
+                        <span className="text-muted-foreground">
+                          Total Bytes:
+                        </span>{" "}
+                        {flow.features?.total_bytes ?? "N/A"}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="text-right">

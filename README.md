@@ -1,1088 +1,433 @@
-# AI-Powered Intrusion Detection System (IDS)
+# Cloud-RT-IDS
 
-A full-stack, machine-learning-based Network Intrusion Detection System
-(IDS) prototype that captures live network flows, extracts flow-level
-features, classifies traffic as **Normal** or **Probe**, records
-detection history, and generates persistent alerts through a Flask
-backend and React frontend.
+**Cloud-Based Real-Time Intrusion Detection System Using Artificial Intelligence**
 
-> **Current project status:** The project has evolved from the original
-> NSL-KDD/URL-oriented prototype into a live network-flow IDS prototype.
-> The current deployed detection pipeline uses 27 flow-level features
-> and a Random Forest model for binary `normal` vs `probe`
-> classification.
+A full-stack, research-oriented IDS prototype that captures live network flows,
+classifies traffic with four ML models (Random Forest, SVM, Neural Network,
+Hybrid Ensemble), generates alerts, and displays real-time results on a React
+security dashboard.
 
-------------------------------------------------------------------------
+> **Research note:** The project uses a custom 27-feature live-flow schema —
+> not the original NSL-KDD 41-feature schema. This is a deliberate research
+> contribution. See [DATASET_DOCUMENTATION.md](DATASET_DOCUMENTATION.md).
 
-## 1. Project Overview
+---
 
-The system is designed to demonstrate an end-to-end IDS workflow:
+## Quick Start
 
-``` text
-Real Network Traffic
-        |
-        v
-Scapy Packet Capture
-        |
-        v
-Bidirectional Flow Construction
-        |
-        v
-27 Flow-Level Features
-        |
-        v
-Random Forest ML Pipeline
-        |
-        v
-Normal / Probe + Confidence
-        |
-        +-------------------+
-        |                   |
-        v                   v
-Prediction History       Alert System
-                            |
-                            v
-                      Persistent alerts.json
-                            |
-                            v
-                       React Dashboard
-```
+### Prerequisites
 
-The current implementation is intended as a **controlled research/demo
-prototype**, not as a production security appliance.
+- Python 3.11+
+- Node.js 20+ and npm
+- Windows: [Npcap](https://npcap.com/) installed (required for live capture)
+- *(Optional)* Docker Desktop for containerised deployment
 
-------------------------------------------------------------------------
+### 1. Clone and set up the backend
 
-# 2. Current Detection Scope
-
-## Supported classes
-
-The current live model supports:
-
--   `normal`
--   `probe`
-
-The original NSL-KDD workflow contained multiple attack categories, but
-the current live-flow model was redesigned around a smaller, directly
-measurable classification problem.
-
-## Current capture interface
-
-The live capture implementation currently uses the Windows Npcap
-loopback interface:
-
-``` text
-\Device\NPF_Loopback
-```
-
-This means the current live demonstration primarily observes traffic
-generated through the local machine's loopback interface, such as:
-
-``` text
-127.0.0.1 <-> 127.0.0.1
-```
-
-It does **not** currently claim to monitor all Wi-Fi/Ethernet/Internet
-traffic.
-
-------------------------------------------------------------------------
-
-# 3. What the IDS Captures
-
-Scapy captures IP/TCP/UDP packets and groups packets belonging to the
-same bidirectional connection into a network flow.
-
-Conceptually:
-
-``` text
-Packet 1
-Packet 2
-Packet 3
-Packet 4
-   |
-   v
-One network flow
-   |
-   v
-Feature extraction
-   |
-   v
-ML prediction
-```
-
-For each flow, the system calculates:
-
--   duration
--   source port
--   destination port
--   forward packet count
--   backward packet count
--   forward bytes
--   backward bytes
--   total packets
--   total bytes
--   packets per second
--   bytes per second
--   mean packet size
--   minimum packet size
--   maximum packet size
--   packet-size standard deviation
--   SYN count
--   ACK count
--   FIN count
--   RST count
--   PSH count
--   forward packet ratio
--   backward packet ratio
--   forward byte ratio
--   backward byte ratio
--   SYN ratio
--   RST ratio
--   protocol
-
-These are the 27 features expected by the current live-flow model.
-
-------------------------------------------------------------------------
-
-# 4. Current Testing Strategy
-
-The current project uses a controlled local test environment.
-
-## Normal traffic
-
-Normal local application traffic can be captured through the loopback
-interface.
-
-For example:
-
-``` text
-Browser / Local Application
-          |
-          v
-      127.0.0.1
-          |
-          v
-     Local Service
-          |
-          v
-       Scapy
-          |
-          v
-       IDS Model
-          |
-          v
-       NORMAL
-```
-
-## Controlled Probe traffic
-
-The project includes controlled localhost probing of ports in the range:
-
-``` text
-8000 - 8049
-```
-
-The purpose is to create a reproducible Probe-like traffic pattern
-without targeting external systems.
-
-Conceptually:
-
-``` text
-127.0.0.1:temporary_port
-          |
-          +----> 127.0.0.1:8000
-          +----> 127.0.0.1:8001
-          +----> 127.0.0.1:8002
-          ...
-          +----> 127.0.0.1:8049
-```
-
-The generated flows can then be captured and classified by the model.
-
-> All testing should remain limited to systems and traffic that you own
-> or are explicitly authorized to test.
-
-------------------------------------------------------------------------
-
-# 5. Repository Layout
-
-``` text
-AI_IDS/
-│
-├── backend/
-│   │
-│   ├── app.py
-│   ├── url_kdd.py
-│   ├── clean_dataset.py
-│   ├── inspect_dataset.py
-│   ├── evaluate_model.py
-│   ├── requirements.txt
-│   │
-│   ├── data/
-│   │   ├── KDDTrain+.txt
-│   │   ├── KDDTest+.txt
-│   │   ├── live_flows.csv
-│   │   ├── live_flows_unlabeled.csv
-│   │   └── test_flows.csv
-│   │
-│   ├── model/
-│   │   ├── train_model.py
-│   │   ├── model.pkl
-│   │   └── preprocessor.pkl
-│   │
-│   ├── notebooks/
-│   │   └── phase2_preprocessing.ipynb
-│   │
-│   └── utils/
-│       └── preprocessing.py
-│
-└── frontend/
-    │
-    ├── package.json
-    │
-    └── src/
-        ├── App.jsx
-        ├── pages/
-        │   ├── Dashboard.jsx
-        │   ├── Monitor.jsx
-        │   ├── Insights.jsx
-        │   ├── Alerts.jsx
-        │   └── Settings.jsx
-        │
-        └── lib/
-            └── api.js
-```
-
-Depending on the local project state, additional generated/runtime files
-may also exist.
-
-------------------------------------------------------------------------
-
-# 6. Backend Components
-
-## `backend/app.py`
-
-Flask API server.
-
-Current responsibilities include:
-
--   loading the trained ML pipeline
--   receiving manual predictions
--   capturing live network flows
--   predicting captured flows
--   maintaining prediction history
--   creating alerts
--   persisting alerts to `data/alerts.json`
--   updating alert status
--   exposing model/evaluation information
--   exposing traffic statistics
--   reading/updating settings
--   reloading model artifacts
-
-### Main API endpoints
-
-  -----------------------------------------------------------------------
-  Endpoint                Method                  Purpose
-  ----------------------- ----------------------- -----------------------
-  `/`                     GET                     Backend health check
-
-  `/predict`              POST                    Predict from manually
-                                                  supplied 27 features
-
-  `/capture`              POST                    Capture live flows and
-                                                  classify them
-
-  `/monitor/history`      GET                     Return recent
-                                                  prediction history
-
-  `/alerts`               GET                     Return alerts
-
-  `/alerts/<id>`          PATCH                   Update alert status
-
-  `/settings`             GET                     Return IDS settings
-
-  `/settings`             POST                    Update IDS settings
-
-  `/insights/metrics`     GET                     Return independent
-                                                  test-set metrics
-
-  `/insights/confusion`   GET                     Return independent
-                                                  test-set confusion
-                                                  matrix
-
-  `/insights/traffic`     GET                     Return live prediction
-                                                  counts
-
-  `/model/retrain`        POST                    Currently reports that
-                                                  retraining is not
-                                                  implemented
-
-  `/model/reload`         POST                    Reload model artifacts
-
-  `/model/reset`          POST                    Reset settings and
-                                                  reload model
-  -----------------------------------------------------------------------
-
-------------------------------------------------------------------------
-
-# 7. Live Capture Endpoint
-
-The current live capture endpoint is:
-
-``` text
-POST /capture
-```
-
-Example:
-
-``` powershell
-Invoke-RestMethod `
-    -Uri "http://127.0.0.1:5000/capture" `
-    -Method POST `
-    -ContentType "application/json" `
-    -Body '{"capture_time":5}'
-```
-
-The backend:
-
-1.  validates the requested capture duration
-2.  captures network packets
-3.  constructs bidirectional flows
-4.  converts each flow into the 27-feature representation
-5.  sends the feature vector through the saved ML pipeline
-6.  obtains the prediction and confidence
-7.  records the prediction
-8.  creates an alert when appropriate
-9.  returns the analyzed flows as JSON
-
-Example response structure:
-
-``` json
-{
-  "message": "Network capture and detection completed",
-  "flows_captured": 1,
-  "flows": [
-    {
-      "features": {
-        "duration": 0.03,
-        "source_port": 55818,
-        "destination_port": 49350,
-        "forward_packets": 5,
-        "backward_packets": 4,
-        "forward_bytes": 41320,
-        "backward_bytes": 188,
-        "total_packets": 9,
-        "total_bytes": 41508,
-        "protocol": "tcp"
-      },
-      "prediction": "normal",
-      "confidence": 0.8533,
-      "timestamp": "YYYY-MM-DD HH:MM:SS"
-    }
-  ]
-}
-```
-
-The exact feature values depend on the captured traffic.
-
-------------------------------------------------------------------------
-
-# 8. Machine Learning Model
-
-The current saved model is a scikit-learn Random Forest pipeline.
-
-The important implementation detail is that the saved `model.pkl`
-already contains the required preprocessing pipeline.
-
-Therefore prediction is performed directly with:
-
-``` python
-prediction = model.predict(features_df)[0]
-
-confidence = float(
-    np.max(
-        model.predict_proba(features_df)
-    )
-)
-```
-
-The frontend/backend should not manually apply the saved preprocessor
-before passing data into this pipeline.
-
-------------------------------------------------------------------------
-
-# 9. Current Model Evaluation
-
-The current independent test set contains:
-
-``` text
-52 samples
-27 Probe
-25 Normal
-```
-
-The measured independent evaluation was approximately:
-
-``` text
-Accuracy : 98.08%
-Precision: 98.00%
-Recall   : 98.00%
-F1 Score : 98.00%
-```
-
-Confusion matrix:
-
-``` text
-                 Predicted
-               Normal  Probe
-
-Actual Normal     24      1
-
-Actual Probe       0     27
-```
-
-### Important interpretation
-
-These numbers come from a **controlled independent localhost test set**.
-
-They should **not** be presented as:
-
--   98% production accuracy
--   98% accuracy on arbitrary Internet traffic
--   proof that the IDS detects all real-world attacks
-
-The current dataset is relatively small and controlled, and the Probe
-traffic is highly uniform. More diverse traffic and evaluation against
-genuinely independent scenarios are needed before making stronger
-performance claims.
-
-------------------------------------------------------------------------
-
-# 10. Frontend
-
-The frontend is a React application.
-
-## Dashboard
-
-The Dashboard currently displays:
-
--   monitoring activity
--   prediction counts
--   alerts
--   traffic information
-
-The live traffic classification uses:
-
-``` text
-Normal
-Probe
-```
-
-rather than the older `Attack` terminology.
-
-## Monitor
-
-The Monitor page supports:
-
-### Manual feature prediction
-
-A user can enter the 27 live-flow features and submit them to
-`/predict`.
-
-### Controlled Probe test
-
-The page can load a predefined Probe-like feature vector for repeatable
-testing.
-
-### Live capture
-
-The `Capture & Detect` button calls:
-
-``` text
-POST /capture
-```
-
-and displays captured flow predictions.
-
-### Continuous monitoring
-
-The page can start and stop repeated capture cycles.
-
-The current implementation performs a capture approximately every 10
-seconds while monitoring is enabled, with each capture lasting
-approximately 5 seconds.
-
-## Insights
-
-The Insights page displays:
-
--   independent test-set model performance
--   confusion matrix
--   live traffic counts
-
-The confusion matrix uses:
-
-``` text
-Normal
-Probe
-```
-
-terminology.
-
-## Alerts
-
-The Alerts page displays generated IDS alerts and supports:
-
--   Mark as Reviewed
--   False Positive
-
-Alert state is persisted in:
-
-``` text
-backend/data/alerts.json
-```
-
-------------------------------------------------------------------------
-
-# 11. Alert Logic
-
-An alert is generated when:
-
-``` text
-prediction != normal
-```
-
-and the confidence exceeds the configured sensitivity threshold.
-
-The default backend setting is:
-
-``` python
-"sensitivity_threshold": 75
-```
-
-The threshold is expressed as a percentage.
-
-For example:
-
-``` text
-prediction = probe
-confidence = 0.85
-threshold  = 75
-```
-
-results in an alert because:
-
-``` text
-85% >= 75%
-```
-
-------------------------------------------------------------------------
-
-# 12. Settings
-
-Current settings include:
-
-``` python
-{
-    "live_detection": True,
-    "ml_model": "random-forest",
-    "sensitivity_threshold": 75,
-    "auto_retrain": False,
-    "email_alerts": True,
-    "desktop_notifications": True
-}
-```
-
-Some UI settings are currently configuration placeholders rather than
-complete external notification integrations.
-
-------------------------------------------------------------------------
-
-# 13. Installation
-
-## Backend
-
-Create a Python virtual environment.
-
-### Windows
-
-``` powershell
+```powershell
+# Create and activate virtual environment
 python -m venv .venv
 .venv\Scripts\activate
-```
 
-### macOS/Linux
-
-``` bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-Install dependencies:
-
-``` bash
+# Install all dependencies (pinned versions)
 pip install -r backend/requirements.txt
 ```
 
-If working from inside the backend directory:
+### 2. Train the models
 
-``` bash
-cd backend
-pip install -r requirements.txt
-```
+Run this once before starting the backend. It produces four model artifacts
+and saves full metrics to JSON files.
 
-------------------------------------------------------------------------
-
-# 14. Running the Backend
-
-From the project root:
-
-``` bash
-python backend/app.py
-```
-
-The Flask server runs on:
-
-``` text
-http://127.0.0.1:5000
-```
-
-Health check:
-
-``` text
-GET http://127.0.0.1:5000/
-```
-
-Expected response:
-
-``` json
-{
-  "message": "Intrusion Detection API Running!"
-}
-```
-
-------------------------------------------------------------------------
-
-# 15. Running the Frontend
-
-From the frontend directory:
-
-``` bash
-cd frontend
-npm install
-npm run dev
-```
-
-The development server is typically available at a localhost address
-such as:
-
-``` text
-http://localhost:8081
-```
-
-The exact port depends on the frontend development configuration.
-
-------------------------------------------------------------------------
-
-# 16. Testing the Live Capture
-
-Make sure the backend is running.
-
-Then:
-
-``` powershell
-Invoke-RestMethod `
-    -Uri "http://127.0.0.1:5000/capture" `
-    -Method POST `
-    -ContentType "application/json" `
-    -Body '{"capture_time":5}'
-```
-
-For a more readable PowerShell result:
-
-``` powershell
-$response = Invoke-RestMethod `
-    -Uri "http://127.0.0.1:5000/capture" `
-    -Method POST `
-    -ContentType "application/json" `
-    -Body '{"capture_time":5}'
-
-$response.flows | Format-List
-```
-
-------------------------------------------------------------------------
-
-# 17. Testing the Frontend
-
-Open the frontend and navigate to:
-
-``` text
-Network Monitor
-```
-
-### Manual test
-
-1.  Click `Load Probe Test`
-2.  Click `Predict Manual Features`
-3.  Observe the prediction and confidence
-
-### Live test
-
-1.  Click `Capture & Detect`
-2.  Wait for the capture to complete
-3.  Review the detected flows
-4.  Review prediction history
-5.  Check Alerts if a non-normal flow exceeds the confidence threshold
-
-### Continuous test
-
-1.  Click `Start Monitoring`
-2.  Allow several capture cycles to run
-3.  Observe history and live captured-flow results
-4.  Click `Stop Monitoring`
-
-------------------------------------------------------------------------
-
-# 18. Data Collection
-
-The project includes live-flow CSV collection utilities.
-
-The current labeled live dataset contains examples of:
-
-``` text
-normal
-probe
-```
-
-The dataset can be inspected using:
-
-``` bash
-python backend/inspect_dataset.py
-```
-
-The controlled labeling/cleaning workflow can be run using:
-
-``` bash
-python backend/clean_dataset.py
-```
-
-The exact dataset size and distribution may change as additional traffic
-is collected.
-
-------------------------------------------------------------------------
-
-# 19. Independent Evaluation
-
-The independent evaluation script is:
-
-``` bash
-python backend/evaluate_model.py
-```
-
-It uses the saved model and the independent flow test dataset.
-
-The evaluation checks:
-
--   accuracy
--   precision
--   recall
--   F1 score
--   confusion matrix
-
-The evaluation script performs prediction using the saved model pipeline
-without fitting the model during evaluation.
-
-------------------------------------------------------------------------
-
-# 20. Model Training
-
-The training script is:
-
-``` bash
+```powershell
 python backend/model/train_model.py
 ```
 
-The current model artifacts include:
+This creates:
+```
+backend/model/
+  model_random_forest.pkl
+  model_svm.pkl
+  model_neural_network.pkl
+  model_hybrid.pkl
+  model.pkl               ← legacy fallback (RF copy)
+  metrics_random_forest.json
+  metrics_svm.json
+  metrics_neural_network.json
+  metrics_hybrid.json
+  metrics_all.json        ← comparison table + current metrics
 
-``` text
-backend/model/model.pkl
-backend/model/preprocessor.pkl
+experiments/baseline/<timestamp>/
+  metrics_all.json
+  run_info.json
 ```
 
-Before retraining, ensure the training data and feature schema match the
-current live-flow feature definition.
+### 3. Start the backend
 
-The backend currently does not expose automatic model retraining.
-
-The `/model/retrain` endpoint intentionally reports that retraining is
-not implemented rather than pretending that a retraining operation
-occurred.
-
-------------------------------------------------------------------------
-
-# 21. Original KDD Dataset Components
-
-The repository still contains the original NSL-KDD-related files:
-
-``` text
-backend/data/KDDTrain+.txt
-backend/data/KDDTest+.txt
-backend/url_kdd.py
-backend/notebooks/phase2_preprocessing.ipynb
-```
-
-These are retained as project history / research material.
-
-However, the current live IDS path is based on the live-flow feature
-representation rather than directly treating a URL as the model input.
-
-This distinction is important:
-
-``` text
-Original prototype:
-URL/KDD-oriented workflow
-
-Current live IDS:
-Network packets
-    ↓
-Network flows
-    ↓
-27 flow features
-    ↓
-ML classification
-```
-
-------------------------------------------------------------------------
-
-# 22. Limitations
-
-The current prototype has several important limitations.
-
-## 22.1 Limited classes
-
-The live model currently distinguishes:
-
-``` text
-Normal vs Probe
-```
-
-It does not currently provide a complete multi-class intrusion taxonomy.
-
-## 22.2 Small controlled dataset
-
-The live dataset is currently small compared with datasets normally used
-for robust network intrusion research.
-
-## 22.3 Controlled Probe traffic
-
-The current Probe traffic is highly structured and repetitive,
-especially around the localhost port range used for collection.
-
-This can make evaluation appear stronger than performance on varied
-real-world traffic.
-
-## 22.4 Loopback capture
-
-The current capture interface is the Windows Npcap loopback interface.
-
-Therefore the current implementation is not equivalent to a network-wide
-IDS monitoring a Wi-Fi or Ethernet adapter.
-
-## 22.5 Flow-duration edge cases
-
-Very short flows can produce extremely large calculated packet/byte
-rates because:
-
-``` text
-rate = quantity / duration
-```
-
-A future version should consider sensible handling or clipping of
-extreme rate values.
-
-## 22.6 In-memory prediction history
-
-Prediction history currently exists in application memory and can be
-lost when Flask restarts.
-
-Alerts are persisted separately in `alerts.json`.
-
-## 22.7 Production hardening
-
-The current application is a prototype and does not yet provide the
-security, concurrency, authentication, database, deployment, and
-operational hardening expected from a production IDS.
-
-------------------------------------------------------------------------
-
-# 23. Research / Project Demonstration Flow
-
-A clean demonstration can follow this sequence:
-
-``` text
-1. Start Flask backend
-        |
-2. Start React frontend
-        |
-3. Open Network Monitor
-        |
-4. Show live capture
-        |
-5. Capture normal localhost traffic
-        |
-6. Show Normal prediction
-        |
-7. Generate controlled local Probe traffic
-        |
-8. Capture again
-        |
-9. Show Probe prediction
-        |
-10. Show confidence
-        |
-11. Show prediction history
-        |
-12. Show generated alert
-        |
-13. Open Insights
-        |
-14. Explain independent evaluation
-```
-
-This demonstrates the complete system without making unsupported claims
-about Internet-wide or production attack detection.
-
-------------------------------------------------------------------------
-
-# 24. Future Improvements
-
-The strongest next improvements are:
-
-1.  Increase the diversity and size of the live-flow dataset.
-2.  Reduce dependence on destination-port patterns.
-3.  Add more controlled abnormal traffic categories.
-4.  Improve ground-truth labeling.
-5.  Add richer flow identifiers and source/destination information.
-6.  Handle very short-duration flows more robustly.
-7.  Persist prediction history in a database.
-8.  Improve alert deduplication and lifecycle management.
-9.  Add proper model/version metadata.
-10. Add an explicit capture-interface selector.
-11. Support authorized Wi-Fi/Ethernet monitoring for controlled lab
-    environments.
-12. Add better real-time visualizations.
-13. Add automated retraining only after a reliable labeled-data workflow
-    exists.
-14. Evaluate on multiple independent traffic scenarios rather than a
-    single controlled test set.
-
-------------------------------------------------------------------------
-
-# 25. Important Project Claim
-
-The current project should be described as:
-
-> **A full-stack machine-learning-based network intrusion detection
-> prototype that captures local network flows, extracts 27 flow-level
-> statistical and TCP features, and classifies traffic as Normal or
-> Probe using a Random Forest pipeline, with real-time monitoring,
-> prediction history, and persistent alerts.**
-
-Avoid describing the current implementation as a complete
-production-grade IDS or as a validated detector for arbitrary Internet
-attacks.
-
-------------------------------------------------------------------------
-
-# 26. Quick Start
-
-From the project root:
-
-### Backend
-
-``` powershell
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r backend/requirements.txt
+```powershell
 python backend/app.py
 ```
 
-### Frontend
+Backend runs at `http://127.0.0.1:5000`
 
-Open another terminal:
+Verify:
+```powershell
+Invoke-RestMethod http://127.0.0.1:5000/health
+```
 
-``` powershell
+### 4. Start the frontend
+
+Open a second terminal:
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-Then open the frontend URL shown by Vite.
+Frontend runs at `http://localhost:5173` (or the port Vite prints).
 
-### Live detection
+---
 
-Navigate to:
+## Project Structure
 
-``` text
-Network Monitor
+```
+AI_IDS/
+│
+├── backend/
+│   ├── app.py                    ← Flask REST API (18 endpoints)
+│   ├── url_kdd.py                ← Scapy capture + feature extraction
+│   ├── simulator.py              ← Synthetic traffic generator
+│   ├── clean_dataset.py          ← Dataset cleaning utility
+│   ├── inspect_dataset.py        ← Dataset inspection utility
+│   ├── evaluate_model.py         ← Standalone evaluation script
+│   ├── requirements.txt          ← Pinned Python dependencies
+│   │
+│   ├── model/
+│   │   ├── train_model.py        ← Multi-model training script
+│   │   ├── model_*.pkl           ← Trained sklearn Pipelines
+│   │   └── metrics_*.json        ← Saved metrics + metadata
+│   │
+│   ├── data/
+│   │   ├── live_flows.csv        ← Training dataset (27 features)
+│   │   ├── test_flows.csv        ← Independent test set
+│   │   ├── alerts.json           ← Persisted alerts
+│   │   ├── prediction_history.json
+│   │   ├── settings.json         ← Persisted IDS settings
+│   │   ├── KDDTrain+.txt         ← NSL-KDD (reference only)
+│   │   └── KDDTest+.txt          ← NSL-KDD (reference only)
+│   │
+│   └── utils/
+│       └── preprocessing.py      ← Shared schema constants + validators
+│
+├── frontend/
+│   └── src/
+│       ├── pages/
+│       │   ├── Dashboard.tsx     ← 6 KPIs + real-time charts
+│       │   ├── Monitor.tsx       ← Manual predict + live capture
+│       │   ├── Insights.tsx      ← Metrics + confusion matrix + comparison
+│       │   ├── Alerts.tsx        ← Alert lifecycle management
+│       │   └── Settings.tsx      ← Model selection + threshold
+│       ├── components/
+│       │   ├── TrafficChart.tsx  ← Real-data time-series chart
+│       │   └── ThreatDistribution.tsx ← Real-data pie chart
+│       └── lib/api.ts            ← Typed Axios client
+│
+├── docker/
+│   ├── Dockerfile.backend        ← python:3.11-slim + libpcap
+│   ├── Dockerfile.frontend       ← node:20-alpine + nginx:1.27-alpine
+│   └── nginx.conf                ← SPA routing + API proxy
+│
+├── k8s/
+│   ├── configmap.yaml
+│   ├── secret.template.yaml
+│   ├── deployment-backend.yaml
+│   ├── deployment-frontend.yaml
+│   ├── service-backend.yaml      ← ClusterIP :5000
+│   ├── service-frontend.yaml     ← NodePort :30080
+│   └── hpa-backend.yaml          ← 1–4 replicas, CPU 70%
+│
+├── tests/
+│   ├── conftest.py               ← Shared fixtures
+│   ├── test_preprocessing.py     ← Schema validation tests
+│   ├── test_model.py             ← Model loading + inference tests
+│   ├── test_api.py               ← REST endpoint tests
+│   ├── test_simulator.py         ← Synthetic traffic tests
+│   └── test_smoke.py             ← End-to-end pipeline test
+│
+├── experiments/
+│   ├── baseline/                 ← Timestamped baseline runs
+│   ├── random_forest/
+│   ├── svm/
+│   ├── neural_network/
+│   ├── hybrid/
+│   └── imbalance_experiments/
+│
+├── docker-compose.yml
+├── pytest.ini
+├── .env.example                  ← Backend env template
+├── frontend/.env.example         ← Frontend env template
+│
+├── README.md                     ← This file
+├── PROJECT_AUDIT.md              ← Full repository audit
+├── JOURNAL_TRACEABILITY.md       ← 142 journal requirements mapped
+├── ARCHITECTURE.md               ← System design + data flow
+├── DATASET_DOCUMENTATION.md      ← Feature schema + methodology
+├── DATASET_CHANGELOG.md          ← NSL-KDD → live-flow evolution
+├── EXPERIMENTS.md                ← Experiment templates + results
+└── FINAL_RESULTS.md              ← Research summary (fill after training)
 ```
 
-and click:
+---
 
-``` text
-Capture & Detect
+## Backend API Reference
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | Version check |
+| `/health` | GET | Model status, uptime, latency |
+| `/metrics` | GET | Prometheus-compatible metrics |
+| `/predict` | POST | Single-flow inference (27 features) |
+| `/capture` | POST | Live Scapy capture + inference |
+| `/simulate` | POST | Synthetic flow generation + inference |
+| `/monitor/history` | GET | Paginated prediction history |
+| `/alerts` | GET | Paginated + filtered alerts |
+| `/alerts/<id>` | PATCH | Update alert status |
+| `/settings` | GET/POST | Read / update IDS settings |
+| `/model/info` | GET | Active model metadata + metrics |
+| `/model/comparison` | GET | All-model comparison table |
+| `/model/reload` | POST | Reload .pkl artifacts from disk |
+| `/model/reset` | POST | Reset to defaults |
+| `/insights/metrics` | GET | Test-set metrics (active model) |
+| `/insights/metrics/perclass` | GET | Per-class precision/recall/F1 |
+| `/insights/confusion` | GET | Confusion matrix (dynamic) |
+| `/insights/traffic` | GET | Live prediction class counts |
+| `/insights/latency` | GET | Latency samples + p50/p95/p99 |
+
+---
+
+## Configuration
+
+Copy `.env.example` to `.env` in the project root and set variables:
+
+```ini
+IDS_HOST=0.0.0.0
+IDS_PORT=5000
+IDS_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+IDS_API_KEY=          # leave empty to disable auth
+IDS_MAX_HISTORY=10000
+IDS_LOG_LEVEL=INFO
 ```
 
-or:
+Copy `frontend/.env.example` to `frontend/.env.local`:
 
-``` text
-Start Monitoring
+```ini
+VITE_API_URL=http://127.0.0.1:5000
+VITE_API_KEY=         # leave empty if backend auth is disabled
 ```
 
-------------------------------------------------------------------------
+---
 
-# 27. Summary
+## Running with Docker
 
-The current system provides an end-to-end IDS prototype:
+```powershell
+# Build and start both services
+docker compose up --build
 
-``` text
-             NETWORK
-                |
-                v
-        +---------------+
-        | Packet Capture|
-        |    Scapy      |
-        +-------+-------+
-                |
-                v
-        +---------------+
-        | Flow Builder  |
-        +-------+-------+
-                |
-                v
-        +---------------+
-        | 27 Features   |
-        +-------+-------+
-                |
-                v
-        +---------------+
-        | Random Forest |
-        +-------+-------+
-                |
-          +-----+-----+
-          |           |
-          v           v
-       NORMAL       PROBE
-          |           |
-          +-----+-----+
-                |
-                v
-       History / Alerts
-                |
-                v
-        React Dashboard
+# Backend:  http://localhost:5000
+# Frontend: http://localhost:8080
+
+# Stop
+docker compose down
 ```
 
-The system is currently best suited for **controlled local
-experimentation, demonstration, and continued IDS research
-development**.
+**Note:** Live Scapy capture requires `--network host` and Npcap on the
+host. The Docker image supports all non-capture endpoints without
+additional permissions.
+
+---
+
+## Running with Kubernetes (minikube)
+
+```powershell
+# Start minikube
+minikube start
+
+# Build images into minikube's Docker daemon
+minikube docker-env | Invoke-Expression
+docker build -f docker/Dockerfile.backend  -t ids-backend:latest  .
+docker build -f docker/Dockerfile.frontend -t ids-frontend:latest .
+
+# Create secret (fill in base64 values first)
+# cp k8s/secret.template.yaml k8s/secret.yaml
+# kubectl apply -f k8s/secret.yaml
+
+# Apply all manifests
+kubectl apply -f k8s/
+
+# Access frontend
+minikube service ids-frontend
+
+# Scale inference manually
+kubectl scale deployment ids-backend --replicas=3
+
+# Watch HPA
+kubectl get hpa ids-backend-hpa --watch
+```
+
+---
+
+## Running Tests
+
+```powershell
+# Run all tests (skips model tests if train_model.py not run yet)
+pytest
+
+# Run specific suite
+pytest tests/test_preprocessing.py -v
+pytest tests/test_simulator.py -v
+pytest tests/test_smoke.py -v
+
+# Run after training (all tests including model tests)
+python backend/model/train_model.py
+pytest
+```
+
+---
+
+## Dataset Setup and Collection
+
+### Inspect the existing dataset
+
+```powershell
+cd backend
+python inspect_dataset.py
+```
+
+### Collect new training data
+
+```powershell
+# Collect normal traffic (5 seconds of loopback traffic)
+python -c "
+from url_kdd import capture_flows, save_flows_to_csv
+flows = capture_flows(capture_time=10)
+save_flows_to_csv(flows, 'data/live_flows.csv', label='normal')
+"
+
+# Collect probe traffic
+python -c "
+from url_kdd import capture_flows, generate_local_probe_traffic, save_flows_to_csv
+import threading, time
+flows = []
+def capture():
+    flows.extend(capture_flows(capture_time=10))
+t = threading.Thread(target=capture)
+t.start()
+time.sleep(1)
+generate_local_probe_traffic()
+t.join()
+save_flows_to_csv(flows, 'data/live_flows.csv', label='probe')
+"
+
+# Clean dataset (verify probe ports, separate unlabeled)
+python clean_dataset.py
+```
+
+### Collect independent test data
+
+Repeat the capture steps above but save to `data/test_flows.csv`.
+**Keep training and test data from separate capture sessions.**
+
+---
+
+## Live Detection Demo
+
+```
+1.  python backend/app.py          ← start backend
+2.  cd frontend && npm run dev     ← start frontend
+3.  Open http://localhost:5173
+4.  Navigate to Network Monitor
+5.  Click "Capture & Detect"       ← captures 5s of loopback traffic
+6.  View predictions in the table
+7.  Switch capture mode to "Controlled Probe Test"
+8.  Click "Capture Probe"          ← generates port-scan + captures
+9.  Watch alert appear in Alerts page
+10. Open Insights to see:
+      - Active model performance metrics
+      - Per-class precision/recall/F1
+      - Confusion matrix
+      - Model comparison table (after training all 4 models)
+      - Detection latency trend chart
+```
+
+---
+
+## Switching ML Models
+
+Via the Settings page in the frontend, or via API:
+
+```powershell
+# Switch to SVM
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/settings" `
+  -Method POST -ContentType "application/json" `
+  -Body '{"ml_model": "svm"}'
+
+# Switch to Hybrid Ensemble
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/settings" `
+  -Method POST -ContentType "application/json" `
+  -Body '{"ml_model": "hybrid"}'
+
+# Check active model info
+Invoke-RestMethod http://127.0.0.1:5000/model/info
+
+# See full model comparison
+Invoke-RestMethod http://127.0.0.1:5000/model/comparison
+```
+
+---
+
+## Simulate Traffic (No Capture Required)
+
+```powershell
+# Generate 10 synthetic DoS flows and classify them
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/simulate" `
+  -Method POST -ContentType "application/json" `
+  -Body '{"class": "dos", "count": 10}'
+```
+
+Supported classes: `normal`, `probe`, `dos`, `r2l`, `u2r`
+
+---
+
+## Research Documentation
+
+| Document | Contents |
+|---|---|
+| [PROJECT_AUDIT.md](PROJECT_AUDIT.md) | Full repo audit: architecture, risks, missing items |
+| [JOURNAL_TRACEABILITY.md](JOURNAL_TRACEABILITY.md) | 142 journal requirements mapped to implementation |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System design, data flow, API reference, deployment |
+| [DATASET_DOCUMENTATION.md](DATASET_DOCUMENTATION.md) | 27-feature schema, preprocessing, methodology |
+| [DATASET_CHANGELOG.md](DATASET_CHANGELOG.md) | NSL-KDD → live-flow evolution, 6 documented changes |
+| [EXPERIMENTS.md](EXPERIMENTS.md) | Experiment templates (populate after training) |
+| [FINAL_RESULTS.md](FINAL_RESULTS.md) | Summary template (populate after training) |
+
+---
+
+## Known Limitations
+
+- Training set is small (~115 samples) — metrics are not statistically stable
+- Probe traffic is highly uniform — accuracy is likely inflated
+- All data captured on Windows loopback — not equivalent to real network monitoring
+- Binary classification only (normal/probe) — live multi-class detection requires more data
+- Docker live capture requires special network configuration
+- Autoscaling benchmarks not yet measured on local hardware
+
+See [FINAL_RESULTS.md](FINAL_RESULTS.md) for the complete limitations table.
+
+---
+
+## Important: What NOT to Do
+
+- Do not replace `live_flows.csv` or `test_flows.csv` with original NSL-KDD data
+- Do not manually edit `metrics_*.json` — always regenerate via `train_model.py`
+- Do not set `IDS_DEBUG=true` in production
+- Do not commit `.env` or `k8s/secret.yaml` to version control

@@ -1,0 +1,44 @@
+# ============================================================
+# Cloud-RT-IDS  ·  Backend Dockerfile
+# ============================================================
+# Build:  docker build -f docker/Dockerfile.backend -t ids-backend .
+# Run:    docker run -p 5000:5000 --env-file .env ids-backend
+# ============================================================
+
+FROM python:3.11-slim
+
+# --- system deps (Scapy needs libpcap) -----------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpcap-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# --- Python deps (cached layer) ------------------------------
+COPY backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# --- Application code ----------------------------------------
+COPY backend/ ./
+
+# --- Non-root user -------------------------------------------
+RUN adduser --disabled-password --gecos "" idsuser \
+    && chown -R idsuser:idsuser /app
+USER idsuser
+
+# --- Runtime config ------------------------------------------
+ENV IDS_HOST=0.0.0.0 \
+    IDS_PORT=5000 \
+    IDS_LOG_LEVEL=INFO \
+    IDS_DEBUG=false
+
+EXPOSE 5000
+
+# --- Health check --------------------------------------------
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')" || exit 1
+
+# --- Entrypoint ----------------------------------------------
+# Use gunicorn in production; falls back to Flask dev server
+# if gunicorn is not installed (add to requirements.txt to enable).
+CMD ["python", "app.py"]

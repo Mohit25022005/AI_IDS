@@ -1,121 +1,126 @@
-import React, { useEffect, useState } from "react";
-import { Shield, Activity, AlertTriangle, TrendingUp } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Shield, Activity, AlertTriangle, TrendingUp, Clock, Zap } from "lucide-react";
 import MetricCard from "@/components/MetricCard";
 import TrafficChart from "@/components/TrafficChart";
 import ThreatDistribution from "@/components/ThreatDistribution";
 import { api } from "@/lib/api";
 
-export default function Dashboard() {
-  const [metrics, setMetrics] = useState({
-    packetsAnalyzed: "0",
-    threatsDetected: "0",
-    modelAccuracy: "0%",
-    systemStatus: "Safe",
-    packetTrend: "+0%",
-    threatTrend: "+0",
-    accuracyTrend: "+0%",
-  });
+interface Metrics {
+  flowsAnalyzed: number;
+  normalFlows: number;
+  attackFlows: number;
+  attackRate: string;
+  activeAlerts: number;
+  systemStatus: string;
+  avgLatencyMs: string;
+  activeModel: string;
+}
 
-  const [trafficData, setTrafficData] = useState([]);
-  const [threatData, setThreatData] = useState([]);
+const DEFAULT_METRICS: Metrics = {
+  flowsAnalyzed: 0,
+  normalFlows: 0,
+  attackFlows: 0,
+  attackRate: "0.00%",
+  activeAlerts: 0,
+  systemStatus: "Safe",
+  avgLatencyMs: "—",
+  activeModel: "—",
+};
+
+export default function Dashboard() {
+  const [metrics, setMetrics] = useState<Metrics>(DEFAULT_METRICS);
 
   const fetchDashboard = async () => {
     try {
-      // Fetch prediction history
-      const historyRes = await api.get("/monitor/history");
-      const history = historyRes.data;
-
-      // Fetch alerts
-      const alertsRes = await api.get("/alerts");
-      const alerts = alertsRes.data;
-
-      // Compute metrics
-      const packetsAnalyzed = history.length;
-      const threatsDetected = alerts.length;
-      const probes = history.filter(
-        h => h.prediction?.toLowerCase() === "probe"
-      ).length;
-      const accuracy =
-        history.length > 0
-          ? ((packetsAnalyzed - probes) / packetsAnalyzed) * 100
-          : 0;
-      const systemStatus = threatsDetected > 0 ? "Under Attack" : "Safe";
-
-      setMetrics({
-        packetsAnalyzed,
-        threatsDetected,
-        modelAccuracy: `${accuracy.toFixed(1)}%`,
-        systemStatus,
-        packetTrend: "+0%", // optional: compute dynamically
-        threatTrend: `+${threatsDetected}`,
-        accuracyTrend: "+0%", // optional
-      });
-
-      // Traffic chart
-      setTrafficData([
-        {
-          name: "Normal",
-          count: history.filter(
-            h => h.prediction?.toLowerCase() === "normal"
-          ).length,
-        },
-        {
-          name: "Probe",
-          count: probes,
-        },
+      const [histRes, alertsRes] = await Promise.all([
+        api.get("/monitor/history?limit=1&page=1"),
+        api.get("/alerts?limit=1&page=1"),
       ]);
 
-      // Threat distribution
-      setThreatData(alerts);
+      const h = histRes.data;
+      const a = alertsRes.data;
 
-    } catch (err) {
-      console.error("Error fetching dashboard data:", err);
+      const activeAlerts: number = (a.alerts ?? []).filter(
+        (al: { status: string }) => al.status === "active"
+      ).length;
+
+      setMetrics({
+        flowsAnalyzed: h.total_records ?? 0,
+        normalFlows:   h.normal_count  ?? 0,
+        attackFlows:   h.attack_count  ?? 0,
+        attackRate:    `${h.attack_rate ?? 0}%`,
+        activeAlerts:  a.total > 0 ? a.total : 0,   // total alerts ever
+        systemStatus:  (h.attack_count ?? 0) > 0 ? "Under Attack" : "Safe",
+        avgLatencyMs:
+          h.avg_latency_ms != null ? `${h.avg_latency_ms} ms` : "—",
+        activeModel: h.active_model ?? "—",
+      });
+    } catch {
+      // backend not reachable — leave last known values
     }
   };
 
   useEffect(() => {
-    fetchDashboard(); // initial fetch
-    const interval = setInterval(fetchDashboard, 3000); // update every 3s
-    return () => clearInterval(interval);
+    fetchDashboard();
+    const id = setInterval(fetchDashboard, 3000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <div className="space-y-6">
-      {/* Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* KPI cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <MetricCard
-          title="Packets Analyzed"
-          value={metrics.packetsAnalyzed}
+          title="Flows Analyzed"
+          value={metrics.flowsAnalyzed}
           icon={Activity}
-          trend={metrics.packetTrend || "+0%"}
           variant="default"
         />
         <MetricCard
-          title="Threats Detected"
-          value={metrics.threatsDetected}
+          title="Normal Flows"
+          value={metrics.normalFlows}
+          icon={Shield}
+          variant="success"
+        />
+        <MetricCard
+          title="Attack Flows"
+          value={metrics.attackFlows}
           icon={AlertTriangle}
-          trend={metrics.threatTrend || "+0"}
           variant="danger"
         />
         <MetricCard
-          title="Model Accuracy"
-          value={metrics.modelAccuracy}
+          title="Attack Rate"
+          value={metrics.attackRate}
           icon={TrendingUp}
-          trend={metrics.accuracyTrend || "+0%"}
-          variant="success"
+          variant={parseFloat(metrics.attackRate) > 0 ? "danger" : "success"}
+        />
+        <MetricCard
+          title="Avg Latency"
+          value={metrics.avgLatencyMs}
+          icon={Clock}
+          variant="default"
         />
         <MetricCard
           title="System Status"
           value={metrics.systemStatus}
-          icon={Shield}
+          icon={Zap}
           variant={metrics.systemStatus === "Safe" ? "success" : "danger"}
         />
       </div>
 
+      {/* Active model badge */}
+      {metrics.activeModel !== "—" && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span className="w-2 h-2 rounded-full bg-primary inline-block" />
+          Active model: <span className="font-medium text-foreground">{metrics.activeModel}</span>
+        </div>
+      )}
+
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <TrafficChart data={trafficData} />
-        <ThreatDistribution data={threatData} />
+        <TrafficChart />
+        <ThreatDistribution />
       </div>
     </div>
   );

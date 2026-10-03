@@ -5,7 +5,9 @@ import pandas as pd
 import numpy as np
 import ipaddress
 import socket
-
+import random
+import uuid
+import time
 from dataclasses import dataclass, field
 
 LIVE_FEATURE_COLUMNS = [
@@ -269,120 +271,122 @@ def capture_flows(capture_time=8, flow_timeout=5.0):
     completed_flows.extend(flows.values())
 
     return completed_flows
+
 def generate_local_probe_traffic(
-    target_ip="127.0.0.1",
-    start_port=8000,
-    number_of_ports=50
+    target="127.0.0.1",
+    port_start=8000,
+    port_end=8049,
+    pattern="mixed"
 ):
     """
-    Generate controlled local port-probing traffic.
+    Generate controlled probe-like traffic against localhost.
 
-    The traffic targets the local machine only.
+    This function is intentionally restricted to 127.0.0.1 so that
+    experiments remain local and safe.
 
-    A small delay is introduced between probes so that
-    the resulting flows are not all generated at exactly
-    the same speed.
+    Supported patterns:
+        - sequential
+        - reverse
+        - random
+        - mixed
 
-    Returns the set of destination ports that were probed.
+    Returns:
+        set[int]: ports that were probed successfully/attempted.
     """
 
-    import socket
-    import time
+    if target != "127.0.0.1":
+        raise ValueError(
+            "Safety restriction: probe generation is limited to 127.0.0.1"
+        )
 
-    print("\n==============================================")
-    print("        GENERATING LOCAL PROBE TRAFFIC")
-    print("==============================================")
+    if port_start < 1 or port_end > 65535 or port_start > port_end:
+        raise ValueError("Invalid port range")
 
-    print(f"🎯 Target: {target_ip}")
+    if pattern not in {
+        "sequential",
+        "reverse",
+        "random",
+        "mixed"
+    }:
+        raise ValueError(
+            "pattern must be one of: sequential, reverse, random, mixed"
+        )
 
-    print(
-        f"🔢 Ports: {start_port} - "
-        f"{start_port + number_of_ports - 1}"
-    )
+    ports = list(range(port_start, port_end + 1))
+
+    if pattern == "sequential":
+        selected_ports = ports
+
+    elif pattern == "reverse":
+        selected_ports = list(reversed(ports))
+
+    elif pattern == "random":
+        selected_ports = ports.copy()
+        random.shuffle(selected_ports)
+
+    else:
+        # Mixed ordering creates a less uniform probing pattern.
+        selected_ports = ports.copy()
+
+        random.shuffle(selected_ports)
+
+        # Keep a portion of the range in sequential order so that
+        # different probing behaviours are represented.
+        split_point = len(selected_ports) // 2
+
+        first_half = selected_ports[:split_point]
+        second_half = list(
+            range(
+                port_start,
+                port_start + (len(selected_ports) - split_point)
+            )
+        )
+
+        selected_ports = first_half + second_half
 
     probed_ports = set()
 
-    for port in range(
-        start_port,
-        start_port + number_of_ports
-    ):
+    # Use several small timing patterns rather than one fixed delay.
+    delays = [
+        0.03,
+        0.05,
+        0.08,
+        0.12
+    ]
 
-        probed_ports.add(port)
-
+    for port in selected_ports:
         try:
-            sock = socket.socket(
+            with socket.socket(
                 socket.AF_INET,
                 socket.SOCK_STREAM
-            )
+            ) as sock:
 
-            sock.settimeout(0.2)
+                sock.settimeout(0.20)
 
-            sock.connect_ex(
-                (target_ip, port)
-            )
+                result = sock.connect_ex(
+                    (target, port)
+                )
 
-            sock.close()
+                # Whether the port is open or closed, the
+                # connection attempt itself is useful for
+                # generating controlled probe traffic.
+                probed_ports.add(port)
 
-        except Exception:
-            pass
+                if result == 0:
+                    try:
+                        sock.shutdown(
+                            socket.SHUT_RDWR
+                        )
+                    except OSError:
+                        pass
 
-        # Small interval between probes.
-        time.sleep(0.05)
+        except OSError:
+            # Individual connection failures should not
+            # terminate the entire experiment.
+            probed_ports.add(port)
 
-    print("✅ Local probe traffic generated.")
-
-    print(
-        f"📊 Ports probed: {len(probed_ports)}"
-    )
-
-    return probed_ports
-    """
-    Generate controlled local port-probing traffic.
-
-    Returns the set of destination ports that were probed.
-    """
-
-    import socket
-    import time
-
-    print("\n==============================================")
-    print("        GENERATING LOCAL PROBE TRAFFIC")
-    print("==============================================")
-
-    print(f"🎯 Target: {target_ip}")
-    print(
-        f"🔢 Ports: {start_port} - "
-        f"{start_port + number_of_ports - 1}"
-    )
-
-    probed_ports = set()
-
-    for port in range(
-        start_port,
-        start_port + number_of_ports
-    ):
-        probed_ports.add(port)
-
-        try:
-            sock = socket.socket(
-                socket.AF_INET,
-                socket.SOCK_STREAM
-            )
-
-            sock.settimeout(0.1)
-
-            sock.connect_ex(
-                (target_ip, port)
-            )
-
-            sock.close()
-
-        except Exception:
-            pass
-
-        time.sleep(0.02)
-
-    print("✅ Local probe traffic generated.")
+        # Vary the timing slightly between probes.
+        time.sleep(random.choice(delays))
 
     return probed_ports
 
@@ -398,7 +402,7 @@ def print_flow_summary(flows):
 
         duration = max(
             flow.end_time - flow.start_time,
-            0.0
+            0.001
         )
 
         total_packets = (
@@ -451,7 +455,9 @@ def flow_to_features(flow):
     Convert a NetworkFlow into real measurable network features.
     """
 
-    duration = max(flow.end_time - flow.start_time, 0.0)
+    # Floor at 1 ms to prevent extreme rate values from near-zero
+    # duration flows (e.g. a 19 µs flow producing pps=106,184).
+    duration = max(flow.end_time - flow.start_time, 0.001)
 
     total_packets = (
         flow.forward_packets +
@@ -532,7 +538,8 @@ def calculate_flow_statistics(flow):
     Calculate additional behavioral statistics for a network flow.
     """
 
-    duration = max(flow.end_time - flow.start_time, 0.0)
+    # Floor at 1 ms to match flow_to_features behaviour.
+    duration = max(flow.end_time - flow.start_time, 0.001)
 
     total_packets = (
         flow.forward_packets +
@@ -679,7 +686,7 @@ def save_flows_to_csv(
 
     import os
     import pandas as pd
-
+    session_id = str(uuid.uuid4())
     rows = []
 
     for flow in flows:
@@ -702,6 +709,9 @@ def save_flows_to_csv(
         rows,
         columns=LIVE_FEATURE_COLUMNS + ["label"]
     )
+
+    # Enforce lowercase labels to avoid train/test case inconsistency.
+    df["label"] = df["label"].astype(str).str.strip().str.lower()
 
     parent_directory = os.path.dirname(output_path)
 

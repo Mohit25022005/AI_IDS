@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ids-backend
+  namespace: default
+  labels:
+    app: ids
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ids
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: ids
+        component: backend
+    spec:
+      containers:
+        - name: ids-backend
+          image: ids-backend:latest    # replace with registry/image:tag
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: ids-config
+            - secretRef:
+                name: ids-secret
+          resources:
+            requests:
+              cpu:    "250m"
+              memory: "512Mi"
+            limits:
+              cpu:    "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds:       15
+            failureThreshold:    3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds:       10
+            failureThreshold:    3
+          volumeMounts:
+            - name: model-data
+              mountPath: /app/model
+            - name: runtime-data
+              mountPath: /app/data
+      volumes:
+        - name: model-data
+          # In production: use a PersistentVolumeClaim
+          emptyDir: {}
+        - name: runtime-data
+          emptyDir: {}

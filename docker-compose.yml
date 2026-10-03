@@ -1,0 +1,66 @@
+version: "3.9"
+
+# ============================================================
+# Cloud-RT-IDS  ·  docker-compose (local development)
+# ============================================================
+# Start everything:  docker compose up --build
+# Stop:              docker compose down
+#
+# Prerequisites:
+#   - Copy .env.example to .env and fill in values
+#   - Run train_model.py first to generate model artifacts
+# ============================================================
+
+services:
+
+  # ── Backend (Flask IDS API) ──────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: ids-backend
+    restart: unless-stopped
+    ports:
+      - "${IDS_PORT:-5000}:5000"
+    environment:
+      IDS_HOST:               "0.0.0.0"
+      IDS_PORT:               "${IDS_PORT:-5000}"
+      IDS_CORS_ORIGINS:       "http://localhost:8080,http://127.0.0.1:8080"
+      IDS_API_KEY:            "${IDS_API_KEY:-}"
+      IDS_MAX_HISTORY:        "${IDS_MAX_HISTORY:-10000}"
+      IDS_LOG_LEVEL:          "${IDS_LOG_LEVEL:-INFO}"
+      IDS_DEBUG:              "false"
+    volumes:
+      # Persist model artifacts and data between restarts
+      - ./backend/model:/app/model
+      - ./backend/data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 15s
+      timeout:  5s
+      retries:  3
+      start_period: 10s
+    networks:
+      - ids-net
+
+  # ── Frontend (React → nginx) ─────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_API_URL: "http://localhost:${IDS_PORT:-5000}"
+    container_name: ids-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - ids-net
+
+networks:
+  ids-net:
+    driver: bridge
