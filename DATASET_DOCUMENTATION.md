@@ -1,120 +1,154 @@
 # DATASET DOCUMENTATION
 
 **Project:** Cloud-RT-IDS  
-**Document version:** 1.0  
-**Date:** 2026-09-23  
-**Schema version:** v2
+**Document version:** 3.0  
+**Date:** 2026-10-04  
+**Schema version:** v2  
 
 ---
 
 ## 1. Dataset Origin
 
-The current dataset is **not** a download of the original NSL-KDD dataset.  
-It is a purpose-built dataset of **live, directly-captured network flows** collected
-on the development machine using Scapy on the Windows Npcap loopback interface
-(`\Device\NPF_Loopback`).
+The active training dataset is derived from the **CIC-IDS-2017** benchmark
+dataset, produced by the Canadian Institute for Cybersecurity at the
+University of New Brunswick.
 
-The NSL-KDD files (`KDDTrain+.txt`, `KDDTest+.txt`) are retained in
-`backend/data/` as **historical reference material only**. They are not loaded by
-any part of the current ML pipeline.
+> Sharafaldin, I., Lashkari, A.H., and Ghorbani, A.A. (2018).
+> "Toward Generating a New Intrusion Detection Dataset and Intrusion
+> Traffic Characterization." *ICISSP 2018*.
+
+The raw CIC-IDS-2017 CSVs were processed through `backend/cicids_pipeline.py`,
+which maps 79 CICFlowMeter features to the project's 27-feature live-flow
+schema, normalises labels, removes duplicates and NaN rows, and produces
+a balanced, stratified train/test split.
+
+**Previous dataset history** is documented in `DATASET_CHANGELOG.md`.
 
 ---
 
-## 2. Feature Schema — Version 2
+## 2. Dataset Files
 
-The schema contains **27 features** derived from a bidirectional network flow.  
-All features are computed from raw packets captured per flow; no external enrichment
-is applied.
+| File | Role | Rows | MD5 |
+|---|---|---|---|
+| `backend/data/live_flows.csv` | Training set | 209,067 | `c782c77456ffaf3524d77b6bb9a56c2e` |
+| `backend/data/test_flows.csv` | Independent test (held-out) | 52,267 | `aea2939883be91f5f24033c0b694fbb8` |
+| `MachineLearningCSV/MachineLearningCVE/` | CIC-IDS-2017 raw source | 2,830,743 | — |
 
-| # | Feature | Type | Unit | Description |
-|---|---|---|---|---|
-| 1 | `duration` | float | seconds | Flow duration (floored at 0.001 s to prevent rate explosion) |
-| 2 | `source_port` | int | — | Source TCP/UDP port |
-| 3 | `destination_port` | int | — | Destination TCP/UDP port |
-| 4 | `forward_packets` | int | count | Packets travelling src → dst |
-| 5 | `backward_packets` | int | count | Packets travelling dst → src |
-| 6 | `forward_bytes` | int | bytes | Bytes travelling src → dst |
-| 7 | `backward_bytes` | int | bytes | Bytes travelling dst → src |
-| 8 | `total_packets` | int | count | forward_packets + backward_packets |
-| 9 | `total_bytes` | int | bytes | forward_bytes + backward_bytes |
-| 10 | `packets_per_second` | float | pkt/s | total_packets / duration |
-| 11 | `bytes_per_second` | float | B/s | total_bytes / duration |
-| 12 | `mean_packet_size` | float | bytes | total_bytes / total_packets |
-| 13 | `min_packet_size` | float | bytes | Minimum observed packet length |
-| 14 | `max_packet_size` | float | bytes | Maximum observed packet length |
-| 15 | `packet_size_std` | float | bytes | Std dev of packet lengths |
-| 16 | `syn_count` | int | count | SYN-only flag packets (SYN=1, ACK=0) |
-| 17 | `ack_count` | int | count | Packets with ACK flag set |
-| 18 | `fin_count` | int | count | Packets with FIN flag set |
-| 19 | `rst_count` | int | count | Packets with RST flag set |
-| 20 | `psh_count` | int | count | Packets with PSH flag set |
-| 21 | `forward_packet_ratio` | float | 0–1 | forward_packets / total_packets |
-| 22 | `backward_packet_ratio` | float | 0–1 | backward_packets / total_packets |
-| 23 | `forward_byte_ratio` | float | 0–1 | forward_bytes / total_bytes |
-| 24 | `backward_byte_ratio` | float | 0–1 | backward_bytes / total_bytes |
-| 25 | `syn_ratio` | float | 0–1 | syn_count / total_packets |
-| 26 | `rst_ratio` | float | 0–1 | rst_count / total_packets |
-| 27 | `protocol` | str | — | "tcp" \| "udp" \| "other" |
+The test set was **never used during training or hyperparameter selection.**
+
+---
+
+## 3. Class Distribution
+
+### Training set (209,067 rows)
+
+| Class | Rows | % | CIC-IDS-2017 source |
+|---|---|---|---|
+| `normal` | 80,000 | 38.3% | BENIGN (sampled from 2,271,320) |
+| `dos` | 40,000 | 19.1% | DoS Hulk / GoldenEye / slowloris / Slowhttptest / Heartbleed |
+| `ddos` | 40,000 | 19.1% | DDoS (sampled from 128,025) |
+| `probe` | 40,000 | 19.1% | PortScan (sampled from 158,804) |
+| `r2l` | 5,920 | 2.8% | FTP-Patator / SSH-Patator / Infiltration (all kept) |
+| `web_attack` | 1,620 | 0.8% | Web Attack — Brute Force / XSS / SQL Injection (all kept) |
+| `bot` | 1,527 | 0.7% | Bot (all kept) |
+
+### Independent test set (52,267 rows)
+
+| Class | Rows | % |
+|---|---|---|
+| `normal` | 20,000 | 38.3% |
+| `dos` | 10,000 | 19.1% |
+| `ddos` | 10,000 | 19.1% |
+| `probe` | 10,000 | 19.1% |
+| `r2l` | 1,480 | 2.8% |
+| `web_attack` | 405 | 0.8% |
+| `bot` | 382 | 0.7% |
+
+The train/test split is **stratified** — each class proportion is preserved.
+
+---
+
+## 4. Feature Schema — Version 2
+
+27 features derived from a bidirectional network flow.
+
+| # | Feature | Type | Unit | CIC-IDS-2017 Source | Notes |
+|---|---|---|---|---|---|
+| 1 | `duration` | float | seconds | `Flow Duration` ÷ 1,000,000 | CIC stores µs → converted to s |
+| 2 | `source_port` | int | — | Not in CIC | Set to 0 for CIC data |
+| 3 | `destination_port` | int | — | `Destination Port` | Direct map |
+| 4 | `forward_packets` | int | count | `Total Fwd Packets` | Direct map |
+| 5 | `backward_packets` | int | count | `Total Backward Packets` | Direct map |
+| 6 | `forward_bytes` | int | bytes | `Total Length of Fwd Packets` | Direct map |
+| 7 | `backward_bytes` | int | bytes | `Total Length of Bwd Packets` | Direct map |
+| 8 | `total_packets` | int | count | Derived | fwd + bwd |
+| 9 | `total_bytes` | int | bytes | Derived | fwd_bytes + bwd_bytes |
+| 10 | `packets_per_second` | float | pkt/s | `Flow Packets/s` | Direct map |
+| 11 | `bytes_per_second` | float | B/s | `Flow Bytes/s` | Direct map |
+| 12 | `mean_packet_size` | float | bytes | `Packet Length Mean` | Direct map |
+| 13 | `min_packet_size` | float | bytes | `Min Packet Length` | Direct map |
+| 14 | `max_packet_size` | float | bytes | `Max Packet Length` | Direct map |
+| 15 | `packet_size_std` | float | bytes | `Packet Length Std` | Direct map |
+| 16 | `syn_count` | int | count | `SYN Flag Count` | Direct map |
+| 17 | `ack_count` | int | count | `ACK Flag Count` | Direct map |
+| 18 | `fin_count` | int | count | `FIN Flag Count` | Direct map |
+| 19 | `rst_count` | int | count | `RST Flag Count` | Direct map |
+| 20 | `psh_count` | int | count | `PSH Flag Count` | Direct map |
+| 21 | `forward_packet_ratio` | float | 0–1 | Derived | fwd_pkts / total_pkts |
+| 22 | `backward_packet_ratio` | float | 0–1 | Derived | bwd_pkts / total_pkts |
+| 23 | `forward_byte_ratio` | float | 0–1 | Derived | fwd_bytes / total_bytes |
+| 24 | `backward_byte_ratio` | float | 0–1 | Derived | bwd_bytes / total_bytes |
+| 25 | `syn_ratio` | float | 0–1 | Derived | syn_count / total_pkts |
+| 26 | `rst_ratio` | float | 0–1 | Derived | rst_count / total_pkts |
+| 27 | `protocol` | str | — | Not in CIC | Set to `"tcp"` for CIC data |
 
 **Target column:** `label`  
-**Allowed label values:** `normal`, `probe`  
-*(Labels are normalised to lowercase at write time in `url_kdd.py`.)*
+**Allowed label values:** `normal`, `dos`, `ddos`, `probe`, `r2l`, `web_attack`, `bot`
 
 ---
 
-## 3. Label Taxonomy
+## 5. CIC-IDS-2017 → Label Mapping
 
-| Label | Meaning |
-|---|---|
-| `normal` | Legitimate background or application traffic captured on the loopback interface |
-| `probe` | Controlled port-scan traffic directed at `127.0.0.1`, ports 8000–8049 |
-
-No other classes are currently present in the collected dataset.  
-The synthetic simulator (`backend/simulator.py`) can generate additional classes
-(`dos`, `r2l`, `u2r`) for model testing, but those are **not** part of the
-ground-truth collected dataset.
-
----
-
-## 4. Dataset Files
-
-| File | Role | Samples | Notes |
-|---|---|---|---|
-| `backend/data/live_flows.csv` | Training data | ~115 rows | Labeled; cleaned by `clean_dataset.py` |
-| `backend/data/test_flows.csv` | Independent test set | ~52 rows | Labeled; **never used during training** |
-| `backend/data/live_flows_unlabeled.csv` | Archived unlabeled captures | varies | Separated by `clean_dataset.py`; not used in ML |
-| `backend/data/KDDTrain+.txt` | Legacy reference | 125,973 rows | NSL-KDD format; **not used** |
-| `backend/data/KDDTest+.txt` | Legacy reference | 22,544 rows | NSL-KDD format; **not used** |
+| Raw CIC label | Mapped label | Rationale |
+|---|---|---|
+| BENIGN | `normal` | Legitimate traffic |
+| DoS Hulk | `dos` | Application-layer flooding |
+| DoS GoldenEye | `dos` | HTTP keep-alive flooding |
+| DoS slowloris | `dos` | Low-and-slow connection exhaustion |
+| DoS Slowhttptest | `dos` | Slow HTTP POST flooding |
+| Heartbleed | `dos` | OpenSSL exploit causing service crash |
+| DDoS | `ddos` | Distributed flooding — distinct from single-source DoS |
+| PortScan | `probe` | Service/host enumeration |
+| FTP-Patator | `r2l` | Remote brute-force credential attack |
+| SSH-Patator | `r2l` | Remote brute-force credential attack |
+| Infiltration | `r2l` | Remote-to-local exploitation |
+| Bot | `bot` | Botnet C&C beaconing |
+| Web Attack – Brute Force | `web_attack` | HTTP form brute force |
+| Web Attack – XSS | `web_attack` | Cross-site scripting injection |
+| Web Attack – Sql Injection | `web_attack` | SQL injection |
 
 ---
 
-## 5. Class Distribution
+## 6. Data Cleaning Steps
 
-Exact counts depend on the current state of `live_flows.csv` and
-`test_flows.csv`. Run the following to inspect:
+The CIC-IDS-2017 dataset has known quality issues. The pipeline applies:
 
-```bash
-python backend/inspect_dataset.py
-```
+1. **Infinity replacement** — `np.inf` and `-np.inf` replaced with `NaN`
+2. **NaN row removal** — rows with NaN in any numeric feature are dropped
+3. **Duplicate removal** — 549,968 exact duplicate flows removed
+4. **Label normalisation** — mapped via `LABEL_MAP` in `cicids_pipeline.py`
+5. **Duration unit conversion** — CIC stores microseconds; divided by 1,000,000
+6. **Ratio derivation** — 6 ratio features computed; zero-division handled by filling 0.0
+7. **Balanced sampling** — majority class capped to prevent model bias
 
-Or check `backend/model/metrics_all.json` after training, which records:
-```json
-"class_distribution_train": { "normal": N, "probe": M },
-"class_distribution_test":  { "normal": N, "probe": M }
-```
-
-**Known imbalance note:** the training set is small (~115 samples) and the
-probe samples come from a single repetitive capture session. The Random Forest
-uses `class_weight="balanced"` to compensate.
+After cleaning: **0 NaN rows, 0 Infinity values** in both train and test sets.
 
 ---
 
-## 6. Preprocessing Pipeline
+## 7. Preprocessing Pipeline
 
-All preprocessing is **embedded inside the scikit-learn `Pipeline` object** saved
-as `model_<name>.pkl`. The same transformations are applied identically at
-training time and inference time — there is no risk of train/test leakage from
-this design.
+All preprocessing is embedded inside the scikit-learn `Pipeline` object.
+The same transformations are applied identically at training and inference time.
 
 ```
 Input DataFrame (27 features)
@@ -122,98 +156,67 @@ Input DataFrame (27 features)
           ▼
 ColumnTransformer
   ├── StandardScaler       → 26 numeric features
-  └── OneHotEncoder        → 1 categorical feature (protocol)
-      (handle_unknown="ignore")
+  └── OneHotEncoder        → 1 categorical (protocol)
+      handle_unknown="ignore"
           │
           ▼
-ML Estimator (RF / SVM / MLP / VotingClassifier)
+ML Estimator (RF / LinearSVM / MLP / VotingClassifier)
 ```
 
-**Scaler fit:** fitted on the training split only (`X_train`).  
-The fitted preprocessor is part of the pipeline — it is never re-fit on
-validation or test data.
+The scaler is **fit on the training split only** (`X_train`).
+It is never re-fit on validation or test data — no data leakage.
 
 ---
 
-## 7. Train / Test Methodology
+## 8. Train / Test Methodology
 
 1. Load `live_flows.csv` (training) and `test_flows.csv` (independent test).
-2. Normalize labels to lowercase; drop rows with NaN labels or non-numeric features.
-3. Validate that all test labels exist in the training label set.
-4. Stratified 80/20 split of training data for validation:
-   - `X_train` / `y_train` — 80 % for fitting
-   - `X_val` / `y_val` — 20 % for validation metrics
-5. Fit all four pipelines on `X_train`.
-6. **Refit** each pipeline on the full training set (`X_full`) for the final artifact.
-7. Evaluate on `X_independent` / `y_independent` — this is the primary reported metric.
+2. Normalise labels to lowercase, drop NaN labels and invalid numeric rows.
+3. Validate all test labels are present in training set.
+4. **Stratified 80/20 split** of training data for validation:
+   - `X_train` / `y_train` — 80% for fitting
+   - `X_val` / `y_val` — 20% for validation metrics
+5. Fit all four pipelines on `X_train`, evaluate on `X_val`.
+6. **Refit** each pipeline on `X_full` (full training set) for final artifact.
+7. Evaluate on `X_independent` — this is the primary reported metric.
 
-**The independent test set is never used during fitting or hyperparameter selection.**
+The independent test set (`test_flows.csv`) is **never used during fitting,
+hyperparameter selection, or model comparison selection.**
 
 ---
 
-## 8. Reproducibility
+## 9. Reproducibility
 
-All experiments use:
-- `random_state=42` in all estimators and `train_test_split`
-- `numpy.random.seed(42)` and `random.seed(42)` at script start
-- Dataset MD5 hashes recorded in `metrics_all.json`
-- Feature schema version tag `v2` embedded in all metrics files
+| Control | Value |
+|---|---|
+| Random seed | 42 (all estimators, `train_test_split`, pipeline seed) |
+| `numpy.random.seed` | 42 |
+| `random.seed` | 42 |
+| Training data MD5 | `c782c77456ffaf3524d77b6bb9a56c2e` |
+| Test data MD5 | `aea2939883be91f5f24033c0b694fbb8` |
+| Feature schema version | v2 (stored in `metrics_all.json`) |
+| Pipeline parameters | Stored in `metrics_<model>.json` → `hyperparameters` |
 
 To reproduce from scratch:
+
 ```bash
-# 1 – ensure live_flows.csv and test_flows.csv are in backend/data/
-# 2 – activate venv and install dependencies
-pip install -r backend/requirements.txt
-# 3 – train all models
-python backend/model/train_model.py
-# 4 – verify metrics
-cat backend/model/metrics_all.json
+python backend/cicids_pipeline.py          # ~5 min, 2.83M rows
+python backend/model/train_model.py        # ~30 min
+python backend/train_anomaly.py            # ~2 min
 ```
 
 ---
 
-## 9. Known Limitations
+## 10. Known Limitations
 
-| Limitation | Impact | Mitigation |
+| Limitation | Impact | Status |
 |---|---|---|
-| Very small training set (~115 samples) | High variance in metrics; numbers are not statistically stable | Collect more diverse traffic sessions |
-| Probe traffic is highly uniform (single port-scan pattern) | Model may learn port-number shortcuts rather than behaviour | Vary port ranges, timing, and packet sizes in future captures |
-| Short-duration flows produce extreme rate values | Can distort StandardScaler statistics | Duration floored at 1 ms; consider log-transform in future schema v3 |
-| Loopback-only capture | Not equivalent to real network monitoring | Extend to Wi-Fi / Ethernet adapter in future work |
-| Binary classification only | Cannot detect DoS, R2L, U2R in live capture | Requires physical or virtual adversarial traffic generation |
-| Test set is also loopback-based | Independent test may share similar distribution to training | Use genuinely separate capture sessions on different days |
-
----
-
-## 10. Data Collection Workflow
-
-```
-Live traffic / controlled probe
-          │
-          ▼
-Scapy sniff on \Device\NPF_Loopback
-          │
-          ▼
-capture_flows()  →  [NetworkFlow, …]
-          │
-          ▼
-build_feature_vector(flow)  →  27-feature dict
-          │
-          ▼
-save_flows_to_csv(flows, label="normal"|"probe")
-          │
-          ▼
-live_flows.csv  (appended, header written once)
-          │
-          ▼
-clean_dataset.py  (removes unlabeled; verifies probe ports)
-          │
-          ▼
-Cleaned live_flows.csv  +  live_flows_unlabeled.csv (archived)
-          │
-          ▼
-train_model.py  →  model artifacts + metrics JSONs
-```
+| `source_port` is 0 for all CIC flows | Feature carries no signal for this dataset | Documented; model ignores it via tree splits |
+| `protocol` is "tcp" for all CIC flows | Feature carries no signal for this dataset | Documented; model ignores it |
+| `bot` class: only 1,527 training rows | Low precision (60%) — model confuses bot with normal | Collect more bot traffic or use SMOTE |
+| `web_attack` class: only 1,620 training rows | Lower precision (75.75%) | Same mitigation as bot |
+| CIC data is from 2017 | Doesn't include modern attack vectors (ransomware, cryptomining, etc.) | Use a more recent dataset for production |
+| Duration in CIC sometimes zero | After µs→s conversion some flows have duration=0 | Floored to 0.001 s in pipeline |
 
 ---
 

@@ -46,7 +46,7 @@ LIVE_FEATURE_COLUMNS = [
     "protocol",
 ]
 
-SUPPORTED_CLASSES = {"normal", "probe", "dos", "r2l", "u2r"}
+SUPPORTED_CLASSES = {"normal", "probe", "dos", "ddos", "r2l", "bot", "web_attack"}
 
 
 # ------------------------------------------------------------------
@@ -138,6 +138,57 @@ _PROFILES: Dict[str, Dict[str, Any]] = {
         "fin_per_flow":        (0, 2),
         "rst_per_flow":        (0, 0),
         "psh_per_flow":        (1, 14),           # interactive keystrokes
+        "protocols":           ["tcp"],
+        "protocol_weights":    [1.0],
+    },
+
+    "ddos": {
+        "description": "Distributed Denial-of-Service — high-volume multi-source flood",
+        "duration_range":      (0.001, 0.5),
+        "src_port_range":      (1024, 65535),
+        "dst_port_common":     [80, 443, 53],
+        "fwd_packets_range":   (200, 5000),
+        "fwd_bwd_ratio":       (0.95, 1.0),
+        "packet_size_range":   (40, 120),
+        "syn_per_flow":        (0, 5),
+        "ack_per_flow":        (0, 2),
+        "fin_per_flow":        (0, 1),
+        "rst_per_flow":        (0, 3),
+        "psh_per_flow":        (0, 0),
+        "protocols":           ["tcp", "udp"],
+        "protocol_weights":    [0.40, 0.60],
+    },
+
+    "bot": {
+        "description": "Botnet C&C communication — periodic low-volume beaconing",
+        "duration_range":      (0.5, 10.0),
+        "src_port_range":      (1024, 65535),
+        "dst_port_common":     [80, 443, 6667, 8080, 1080],
+        "fwd_packets_range":   (3, 25),
+        "fwd_bwd_ratio":       (0.45, 0.60),
+        "packet_size_range":   (60, 400),
+        "syn_per_flow":        (0, 1),
+        "ack_per_flow":        (2, 24),
+        "fin_per_flow":        (0, 2),
+        "rst_per_flow":        (0, 1),
+        "psh_per_flow":        (1, 12),
+        "protocols":           ["tcp"],
+        "protocol_weights":    [1.0],
+    },
+
+    "web_attack": {
+        "description": "Web attacks — brute force, XSS, SQL injection",
+        "duration_range":      (0.01, 5.0),
+        "src_port_range":      (1024, 65535),
+        "dst_port_common":     [80, 443, 8080, 8443],
+        "fwd_packets_range":   (2, 30),
+        "fwd_bwd_ratio":       (0.50, 0.75),
+        "packet_size_range":   (200, 1400),
+        "syn_per_flow":        (0, 1),
+        "ack_per_flow":        (1, 29),
+        "fin_per_flow":        (0, 2),
+        "rst_per_flow":        (0, 1),
+        "psh_per_flow":        (1, 20),
         "protocols":           ["tcp"],
         "protocol_weights":    [1.0],
     },

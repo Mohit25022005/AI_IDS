@@ -1,0 +1,19 @@
+{
+  "run_timestamp": "2026-10-03T19-28-08",
+  "script": "C:\\Users\\mohit\\AI_IDS\\AI_IDS\\backend\\model\\train_model.py",
+  "train_data": "C:\\Users\\mohit\\AI_IDS\\AI_IDS\\backend\\data\\live_flows.csv",
+  "test_data": "C:\\Users\\mohit\\AI_IDS\\AI_IDS\\backend\\data\\test_flows.csv",
+  "train_md5": "c782c77456ffaf3524d77b6bb9a56c2e",
+  "test_md5": "aea2939883be91f5f24033c0b694fbb8",
+  "feature_schema_version": "v2",
+  "random_seed": 42,
+  "classes": [
+    "bot",
+    "ddos",
+    "dos",
+    "normal",
+    "probe",
+    "r2l",
+    "web_attack"
+  ]
+}

@@ -1,27 +1,23 @@
 """
 Cloud-RT-IDS Training Script
 =============================
-Trains four models on the live-flow 27-feature dataset:
+Trains four models on the 27-feature CIC-IDS-2017 dataset:
   1. Random Forest
   2. Support Vector Machine
   3. Neural Network (MLP)
   4. Hybrid Ensemble (soft voting: RF + SVM + NN)
 
+Dataset: CIC-IDS-2017 (real network traffic, 7 classes)
+  Classes: normal, dos, ddos, probe, r2l, bot, web_attack
+
 For every model the script:
-  - Trains on the full labeled training set (after 80/20 validation split)
+  - Trains on the full labelled training set (after 80/20 validation split)
   - Evaluates on the held-out validation set
   - Evaluates on the independent test set
   - Saves the sklearn Pipeline artifact (.pkl)
   - Saves a structured metrics JSON file (metrics_<name>.json)
 
 A summary metrics_all.json is also written for the backend API.
-
-Dataset modification note
---------------------------
-The project uses a custom 27-feature live-flow schema (NOT the original
-NSL-KDD 41-feature schema).  This is a deliberate research contribution.
-DO NOT replace this dataset with the original NSL-KDD data.
-See DATASET_DOCUMENTATION.md for the full schema description.
 """
 
 import os
@@ -40,7 +36,9 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.svm import SVC
+from sklearn.linear_model import SGDClassifier
 from sklearn.neural_network import MLPClassifier
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -400,47 +398,61 @@ rf_params = {
     "random_state": RANDOM_SEED,
 }
 
-# 2) SVM  ----------------------------------------------------------
+# 2) SVM (Linear, via SGDClassifier — scales to 200k rows)  --------
+# RBF SVC would take hours on 200k samples.  SGD with hinge loss is
+# mathematically equivalent to a linear SVM and trains in seconds.
+# CalibratedClassifierCV wraps it so predict_proba() is available
+# (needed for soft voting in the Hybrid model).
 svm_estimator = Pipeline([
     ("preprocessor", build_preprocessor()),
-    ("model", SVC(
-        kernel="rbf",
-        C=10.0,
-        gamma="scale",
-        probability=True,
-        class_weight="balanced",
-        random_state=RANDOM_SEED,
+    ("model", CalibratedClassifierCV(
+        SGDClassifier(
+            loss="modified_huber",   # smooth hinge — gives probabilities natively
+            penalty="l2",
+            alpha=1e-4,
+            max_iter=1000,
+            tol=1e-3,
+            class_weight="balanced",
+            random_state=RANDOM_SEED,
+            n_jobs=-1,
+        ),
+        cv=3,
+        method="isotonic",
     )),
 ])
 svm_params = {
-    "kernel": "rbf",
-    "C": 10.0,
-    "gamma": "scale",
-    "probability": True,
+    "algorithm":    "SGD (linear SVM, modified_huber loss)",
+    "penalty":      "l2",
+    "alpha":        1e-4,
+    "max_iter":     1000,
     "class_weight": "balanced",
-    "random_state": RANDOM_SEED,
+    "calibration":  "CalibratedClassifierCV(cv=3, isotonic)",
+    "note":         "RBF SVC replaced with SGD for scalability (200k rows)",
 }
 
-# 3) Neural Network (MLP)  ----------------------------------------
+# 3) Neural Network (MLP) — deeper for 7-class real data  ----------
 nn_estimator = Pipeline([
     ("preprocessor", build_preprocessor()),
     ("model", MLPClassifier(
-        hidden_layer_sizes=(128, 64, 32),
+        hidden_layer_sizes=(256, 128, 64),
         activation="relu",
         solver="adam",
         alpha=1e-4,
-        max_iter=1000,
+        batch_size=512,
+        max_iter=200,
         early_stopping=True,
         validation_fraction=0.1,
+        n_iter_no_change=15,
         random_state=RANDOM_SEED,
     )),
 ])
 nn_params = {
-    "hidden_layer_sizes": [128, 64, 32],
+    "hidden_layer_sizes": [256, 128, 64],
     "activation": "relu",
     "solver": "adam",
     "alpha": 1e-4,
-    "max_iter": 1000,
+    "batch_size": 512,
+    "max_iter": 200,
     "early_stopping": True,
     "random_state": RANDOM_SEED,
 }
@@ -471,9 +483,7 @@ nn_metrics = train_and_evaluate(
 )
 all_results["neural_network"] = nn_metrics
 
-# 4) Hybrid Ensemble (soft voting)  --------------------------------
-# Re-build fresh estimators for the ensemble so the VotingClassifier
-# owns its own unfitted copies.
+# 4) Hybrid Ensemble (soft voting: RF + LinearSVM + NN)  -----------
 hybrid_estimator = Pipeline([
     ("preprocessor", build_preprocessor()),
     ("model", VotingClassifier(
@@ -484,22 +494,29 @@ hybrid_estimator = Pipeline([
                 random_state=RANDOM_SEED,
                 n_jobs=-1,
             )),
-            ("svm", SVC(
-                kernel="rbf",
-                C=10.0,
-                gamma="scale",
-                probability=True,
-                class_weight="balanced",
-                random_state=RANDOM_SEED,
+            ("svm", CalibratedClassifierCV(
+                SGDClassifier(
+                    loss="modified_huber",
+                    penalty="l2",
+                    alpha=1e-4,
+                    max_iter=1000,
+                    class_weight="balanced",
+                    random_state=RANDOM_SEED,
+                    n_jobs=-1,
+                ),
+                cv=3,
+                method="isotonic",
             )),
             ("nn", MLPClassifier(
-                hidden_layer_sizes=(128, 64, 32),
+                hidden_layer_sizes=(256, 128, 64),
                 activation="relu",
                 solver="adam",
                 alpha=1e-4,
-                max_iter=1000,
+                batch_size=512,
+                max_iter=200,
                 early_stopping=True,
                 validation_fraction=0.1,
+                n_iter_no_change=15,
                 random_state=RANDOM_SEED,
             )),
         ],
@@ -508,7 +525,7 @@ hybrid_estimator = Pipeline([
 ])
 hybrid_params = {
     "voting": "soft",
-    "estimators": ["random_forest", "svm", "neural_network"],
+    "estimators": ["random_forest", "linear_svm", "neural_network"],
     "strategy": "average_of_class_probabilities",
 }
 

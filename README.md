@@ -1,82 +1,103 @@
 # Cloud-RT-IDS
 
-**Cloud-Based Real-Time Intrusion Detection System Using Artificial Intelligence**
+**Cloud-Based Real-Time Intrusion Detection System Using Artificial Intelligence**  
+**Version:** 3.0 — Enterprise Edition  
+**Dataset:** CIC-IDS-2017 (2.83M real network flows, 7 attack classes)
 
-A full-stack, research-oriented IDS prototype that captures live network flows,
-classifies traffic with four ML models (Random Forest, SVM, Neural Network,
-Hybrid Ensemble), generates alerts, and displays real-time results on a React
-security dashboard.
-
-> **Research note:** The project uses a custom 27-feature live-flow schema —
-> not the original NSL-KDD 41-feature schema. This is a deliberate research
-> contribution. See [DATASET_DOCUMENTATION.md](DATASET_DOCUMENTATION.md).
+A full-stack, enterprise-grade IDS trained on real network traffic. Classifies flows
+across 7 attack categories using four ML models, detects zero-days via IsolationForest,
+explains every prediction with SHAP, streams alerts in real-time via SSE, and persists
+all data in SQLite.
 
 ---
 
-## Quick Start
+## System at a Glance
+
+```
+Real Network Traffic / CIC-IDS-2017
+            │
+            ▼
+  Scapy Packet Capture  OR  REST /predict
+            │
+            ▼
+   27-Feature Flow Vector
+            │
+     ┌──────┴──────┐
+     ▼             ▼
+ Classifier    IsolationForest
+ (RF/SVM/NN/   (anomaly layer —
+  Hybrid)       zero-day detection)
+     │             │
+     └──────┬───────┘
+            ▼
+      Alert Engine
+   (severity + SHAP top-5)
+            │
+      SQLite Database
+            │
+     SSE Stream → React Dashboard
+```
+
+---
+
+## Quickstart
 
 ### Prerequisites
 
-- Python 3.11+
-- Node.js 20+ and npm
-- Windows: [Npcap](https://npcap.com/) installed (required for live capture)
-- *(Optional)* Docker Desktop for containerised deployment
+| Requirement | Version |
+|---|---|
+| Python | 3.11+ |
+| Node.js | 20+ |
+| Npcap (Windows) | Latest — [npcap.com](https://npcap.com/) |
+| Docker (optional) | 24+ |
 
-### 1. Clone and set up the backend
+### 1 — Install backend
 
 ```powershell
-# Create and activate virtual environment
 python -m venv .venv
 .venv\Scripts\activate
-
-# Install all dependencies (pinned versions)
 pip install -r backend/requirements.txt
 ```
 
-### 2. Train the models
+### 2 — Build the dataset from CIC-IDS-2017
 
-Run this once before starting the backend. It produces four model artifacts
-and saves full metrics to JSON files.
-
-```powershell
-python backend/model/train_model.py
-```
-
-This creates:
-```
-backend/model/
-  model_random_forest.pkl
-  model_svm.pkl
-  model_neural_network.pkl
-  model_hybrid.pkl
-  model.pkl               ← legacy fallback (RF copy)
-  metrics_random_forest.json
-  metrics_svm.json
-  metrics_neural_network.json
-  metrics_hybrid.json
-  metrics_all.json        ← comparison table + current metrics
-
-experiments/baseline/<timestamp>/
-  metrics_all.json
-  run_info.json
-```
-
-### 3. Start the backend
+Place the 8 CIC-IDS-2017 CSVs in `MachineLearningCSV/MachineLearningCVE/`, then:
 
 ```powershell
-python backend/app.py
+cd backend
+python cicids_pipeline.py
 ```
 
-Backend runs at `http://127.0.0.1:5000`
+This reads 2.83M real flows, maps 79 CIC columns to our 27-feature schema,
+balances classes, and writes:
 
-Verify:
+```
+backend/data/live_flows.csv   — 209,067 training rows
+backend/data/test_flows.csv   —  52,267 test rows (held-out)
+```
+
+### 3 — Train all models
+
+```powershell
+python model/train_model.py   # RF + LinearSVM + NN + Hybrid (~30 min)
+python train_anomaly.py       # IsolationForest on normal-only traffic
+```
+
+Artifacts saved to `backend/model/`.
+
+### 4 — Start the backend
+
+```powershell
+python app.py
+```
+
+Runs at `http://127.0.0.1:5000`. Verify:
+
 ```powershell
 Invoke-RestMethod http://127.0.0.1:5000/health
 ```
 
-### 4. Start the frontend
-
-Open a second terminal:
+### 5 — Start the frontend
 
 ```powershell
 cd frontend
@@ -84,7 +105,7 @@ npm install
 npm run dev
 ```
 
-Frontend runs at `http://localhost:5173` (or the port Vite prints).
+Opens at `http://localhost:5173`.
 
 ---
 
@@ -94,184 +115,249 @@ Frontend runs at `http://localhost:5173` (or the port Vite prints).
 AI_IDS/
 │
 ├── backend/
-│   ├── app.py                    ← Flask REST API (18 endpoints)
-│   ├── url_kdd.py                ← Scapy capture + feature extraction
-│   ├── simulator.py              ← Synthetic traffic generator
-│   ├── clean_dataset.py          ← Dataset cleaning utility
-│   ├── inspect_dataset.py        ← Dataset inspection utility
-│   ├── evaluate_model.py         ← Standalone evaluation script
-│   ├── requirements.txt          ← Pinned Python dependencies
+│   ├── app.py                     Flask API v3 (SQLite, SSE, SHAP, rate limiting)
+│   ├── cicids_pipeline.py         CIC-IDS-2017 → 27-feature data pipeline
+│   ├── train_anomaly.py           IsolationForest training script
+│   ├── augment_dataset.py         Synthetic data augmentation utility
+│   ├── simulator.py               Synthetic traffic generator (7 classes)
+│   ├── url_kdd.py                 Scapy packet capture + feature extraction
+│   ├── clean_dataset.py           Dataset cleaning utility
+│   ├── inspect_dataset.py         Dataset inspection utility
+│   ├── evaluate_model.py          Standalone evaluation script
+│   ├── requirements.txt           Pinned Python dependencies
 │   │
 │   ├── model/
-│   │   ├── train_model.py        ← Multi-model training script
-│   │   ├── model_*.pkl           ← Trained sklearn Pipelines
-│   │   └── metrics_*.json        ← Saved metrics + metadata
+│   │   ├── train_model.py         Multi-model training (RF + LinearSVM + NN + Hybrid)
+│   │   ├── model_random_forest.pkl
+│   │   ├── model_svm.pkl          (SGD / Linear SVM, CalibratedClassifierCV)
+│   │   ├── model_neural_network.pkl
+│   │   ├── model_hybrid.pkl       (Soft voting: RF + SVM + NN)
+│   │   ├── model_anomaly.pkl      IsolationForest (normal-only training)
+│   │   ├── model.pkl              Legacy RF alias (backward compat)
+│   │   ├── metrics_random_forest.json
+│   │   ├── metrics_svm.json
+│   │   ├── metrics_neural_network.json
+│   │   ├── metrics_hybrid.json
+│   │   ├── metrics_anomaly.json
+│   │   └── metrics_all.json       Comparison table + active model metrics
 │   │
 │   ├── data/
-│   │   ├── live_flows.csv        ← Training dataset (27 features)
-│   │   ├── test_flows.csv        ← Independent test set
-│   │   ├── alerts.json           ← Persisted alerts
-│   │   ├── prediction_history.json
-│   │   ├── settings.json         ← Persisted IDS settings
-│   │   ├── KDDTrain+.txt         ← NSL-KDD (reference only)
-│   │   └── KDDTest+.txt          ← NSL-KDD (reference only)
+│   │   ├── live_flows.csv         Training set (CIC-IDS-2017, 209,067 rows)
+│   │   ├── test_flows.csv         Held-out test set (52,267 rows)
+│   │   ├── ids.db                 SQLite — alerts, history, settings
+│   │   └── feedback.jsonl         Analyst label corrections (for future retrain)
 │   │
 │   └── utils/
-│       └── preprocessing.py      ← Shared schema constants + validators
+│       └── preprocessing.py       Shared schema constants + validators
 │
 ├── frontend/
 │   └── src/
 │       ├── pages/
-│       │   ├── Dashboard.tsx     ← 6 KPIs + real-time charts
-│       │   ├── Monitor.tsx       ← Manual predict + live capture
-│       │   ├── Insights.tsx      ← Metrics + confusion matrix + comparison
-│       │   ├── Alerts.tsx        ← Alert lifecycle management
-│       │   └── Settings.tsx      ← Model selection + threshold
+│       │   ├── Dashboard.tsx      6 KPIs + real-time traffic/threat charts
+│       │   ├── Monitor.tsx        Manual predict + live capture
+│       │   ├── Insights.tsx       Metrics, confusion matrix, model comparison, latency
+│       │   ├── Alerts.tsx         SSE-powered alert stream + SHAP + anomaly bar
+│       │   └── Settings.tsx       Model selection + threshold
 │       ├── components/
-│       │   ├── TrafficChart.tsx  ← Real-data time-series chart
-│       │   └── ThreatDistribution.tsx ← Real-data pie chart
-│       └── lib/api.ts            ← Typed Axios client
+│       │   ├── TrafficChart.tsx   Real-data rolling time-series
+│       │   └── ThreatDistribution.tsx  Real-data class distribution pie
+│       └── lib/api.ts             Typed Axios client
+│
+├── MachineLearningCSV/
+│   └── MachineLearningCVE/        CIC-IDS-2017 raw CSVs (8 files, 2.83M rows)
 │
 ├── docker/
-│   ├── Dockerfile.backend        ← python:3.11-slim + libpcap
-│   ├── Dockerfile.frontend       ← node:20-alpine + nginx:1.27-alpine
-│   └── nginx.conf                ← SPA routing + API proxy
+│   ├── Dockerfile.backend         python:3.11-slim + libpcap
+│   ├── Dockerfile.frontend        node:20-alpine build + nginx:1.27-alpine serve
+│   └── nginx.conf
 │
 ├── k8s/
 │   ├── configmap.yaml
 │   ├── secret.template.yaml
 │   ├── deployment-backend.yaml
 │   ├── deployment-frontend.yaml
-│   ├── service-backend.yaml      ← ClusterIP :5000
-│   ├── service-frontend.yaml     ← NodePort :30080
-│   └── hpa-backend.yaml          ← 1–4 replicas, CPU 70%
+│   ├── service-backend.yaml       ClusterIP :5000
+│   ├── service-frontend.yaml      NodePort :30080
+│   └── hpa-backend.yaml           HPA 1–4 replicas, CPU 70%
 │
 ├── tests/
-│   ├── conftest.py               ← Shared fixtures
-│   ├── test_preprocessing.py     ← Schema validation tests
-│   ├── test_model.py             ← Model loading + inference tests
-│   ├── test_api.py               ← REST endpoint tests
-│   ├── test_simulator.py         ← Synthetic traffic tests
-│   └── test_smoke.py             ← End-to-end pipeline test
+│   ├── conftest.py
+│   ├── test_preprocessing.py
+│   ├── test_model.py
+│   ├── test_api.py
+│   ├── test_simulator.py
+│   └── test_smoke.py
 │
 ├── experiments/
-│   ├── baseline/                 ← Timestamped baseline runs
-│   ├── random_forest/
-│   ├── svm/
-│   ├── neural_network/
-│   ├── hybrid/
-│   └── imbalance_experiments/
+│   └── baseline/<timestamp>/      Timestamped experiment archives
 │
 ├── docker-compose.yml
 ├── pytest.ini
-├── .env.example                  ← Backend env template
-├── frontend/.env.example         ← Frontend env template
+├── .env.example                   Backend environment template
+├── frontend/.env.example          Frontend environment template
 │
-├── README.md                     ← This file
-├── PROJECT_AUDIT.md              ← Full repository audit
-├── JOURNAL_TRACEABILITY.md       ← 142 journal requirements mapped
-├── ARCHITECTURE.md               ← System design + data flow
-├── DATASET_DOCUMENTATION.md      ← Feature schema + methodology
-├── DATASET_CHANGELOG.md          ← NSL-KDD → live-flow evolution
-├── EXPERIMENTS.md                ← Experiment templates + results
-└── FINAL_RESULTS.md              ← Research summary (fill after training)
+└── docs/
+    ├── README.md                  This file
+    ├── ARCHITECTURE.md
+    ├── DATASET_DOCUMENTATION.md
+    ├── DATASET_CHANGELOG.md
+    ├── EXPERIMENTS.md
+    ├── FINAL_RESULTS.md
+    ├── PROJECT_AUDIT.md
+    └── JOURNAL_TRACEABILITY.md
 ```
 
 ---
 
-## Backend API Reference
+## API Reference
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/` | GET | Version check |
-| `/health` | GET | Model status, uptime, latency |
-| `/metrics` | GET | Prometheus-compatible metrics |
-| `/predict` | POST | Single-flow inference (27 features) |
-| `/capture` | POST | Live Scapy capture + inference |
-| `/simulate` | POST | Synthetic flow generation + inference |
-| `/monitor/history` | GET | Paginated prediction history |
-| `/alerts` | GET | Paginated + filtered alerts |
-| `/alerts/<id>` | PATCH | Update alert status |
-| `/settings` | GET/POST | Read / update IDS settings |
-| `/model/info` | GET | Active model metadata + metrics |
-| `/model/comparison` | GET | All-model comparison table |
-| `/model/reload` | POST | Reload .pkl artifacts from disk |
-| `/model/reset` | POST | Reset to defaults |
-| `/insights/metrics` | GET | Test-set metrics (active model) |
-| `/insights/metrics/perclass` | GET | Per-class precision/recall/F1 |
-| `/insights/confusion` | GET | Confusion matrix (dynamic) |
-| `/insights/traffic` | GET | Live prediction class counts |
-| `/insights/latency` | GET | Latency samples + p50/p95/p99 |
+| Endpoint | Method | Auth | Description |
+|---|---|---|---|
+| `/` | GET | — | Version + health message |
+| `/health` | GET | — | Model status, uptime, anomaly model, latency |
+| `/metrics` | GET | — | Prometheus-compatible metrics |
+| `/predict` | POST | ✓ | Single-flow inference + SHAP + anomaly score |
+| `/capture` | POST | ✓ | Live Scapy capture + inference |
+| `/simulate` | POST | ✓ | Synthetic flow generation + inference |
+| `/stream/alerts` | GET | — | SSE — real-time alert push (no polling needed) |
+| `/monitor/history` | GET | ✓ | Paginated + filtered prediction history |
+| `/alerts` | GET | ✓ | Paginated + filtered alerts |
+| `/alerts/<id>` | PATCH | ✓ | Update alert status |
+| `/feedback` | POST | ✓ | Submit analyst-corrected label for an alert |
+| `/settings` | GET/POST | ✓ | Read / update IDS settings (SQLite-persisted) |
+| `/model/info` | GET | — | Active model metadata + metrics |
+| `/model/comparison` | GET | — | All-model comparison table |
+| `/model/reload` | POST | ✓ | Reload all .pkl artifacts from disk |
+| `/model/reset` | POST | ✓ | Reset settings + reload models |
+| `/insights/metrics` | GET | — | Test-set metrics for active model |
+| `/insights/metrics/perclass` | GET | — | Per-class precision / recall / F1 |
+| `/insights/confusion` | GET | — | Confusion matrix (dynamic, from saved JSON) |
+| `/insights/traffic` | GET | — | Live prediction class counts |
+| `/insights/latency` | GET | — | Latency samples + p50 / p95 / p99 |
+
+Auth ✓ = `X-API-Key` header required when `IDS_API_KEY` env variable is set.
 
 ---
 
-## Configuration
+## Environment Configuration
 
-Copy `.env.example` to `.env` in the project root and set variables:
+Copy `.env.example` to `.env`:
 
 ```ini
 IDS_HOST=0.0.0.0
 IDS_PORT=5000
 IDS_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-IDS_API_KEY=          # leave empty to disable auth
+IDS_API_KEY=                    # leave empty to disable auth
 IDS_MAX_HISTORY=10000
 IDS_LOG_LEVEL=INFO
+IDS_DB_URL=sqlite:///data/ids.db
 ```
 
 Copy `frontend/.env.example` to `frontend/.env.local`:
 
 ```ini
 VITE_API_URL=http://127.0.0.1:5000
-VITE_API_KEY=         # leave empty if backend auth is disabled
+VITE_API_KEY=                   # match IDS_API_KEY above
 ```
+
+---
+
+## Attack Classes
+
+| Label | CIC-IDS-2017 Source | Severity | Train Rows | Test Rows |
+|---|---|---|---|---|
+| `normal` | BENIGN | info | 80,000 | 20,000 |
+| `dos` | DoS Hulk, GoldenEye, slowloris, Slowhttptest, Heartbleed | high | 40,000 | 10,000 |
+| `ddos` | DDoS | critical | 40,000 | 10,000 |
+| `probe` | PortScan | medium | 40,000 | 10,000 |
+| `r2l` | FTP-Patator, SSH-Patator, Infiltration | high | 5,920 | 1,480 |
+| `web_attack` | Web Attack (Brute Force, XSS, SQLi) | high | 1,620 | 405 |
+| `bot` | Bot | critical | 1,527 | 382 |
+
+---
+
+## Model Results (CIC-IDS-2017, Independent Test Set)
+
+| Model | Accuracy | Precision | Recall | F1 Macro | Training Time | Latency |
+|---|---|---|---|---|---|---|
+| **Hybrid** (RF+SVM+NN) | **99.29%** | **95.00%** | **95.75%** | **95.05%** | 704.6 s | 0.039 ms |
+| Neural Network (256-128-64) | 99.13% | 94.53% | 94.95% | 94.36% | 668.9 s | 0.027 ms |
+| Random Forest (300 trees) | 99.14% | 90.72% | 99.30% | 94.12% | 8.2 s | 0.012 ms |
+| Linear SVM (SGD) | 93.03% | 75.97% | 79.41% | 77.47% | 4.6 s | 0.003 ms |
+
+All values are from `backend/model/metrics_all.json` — never hardcoded.
+
+---
+
+## Switching Models
+
+```powershell
+# Via API
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/settings" `
+  -Method POST -ContentType "application/json" `
+  -Body '{"ml_model": "hybrid"}'
+
+# Available values: "random-forest", "svm", "neural-network", "hybrid"
+
+# Check current model + metrics
+Invoke-RestMethod http://127.0.0.1:5000/model/info
+```
+
+Or use the **Settings** page in the frontend — all four models are available.
 
 ---
 
 ## Running with Docker
 
 ```powershell
-# Build and start both services
 docker compose up --build
 
 # Backend:  http://localhost:5000
 # Frontend: http://localhost:8080
-
-# Stop
-docker compose down
 ```
 
-**Note:** Live Scapy capture requires `--network host` and Npcap on the
-host. The Docker image supports all non-capture endpoints without
-additional permissions.
+> Live Scapy capture inside Docker requires `--network host` and Npcap on
+> the host. All non-capture endpoints work without special permissions.
 
 ---
 
-## Running with Kubernetes (minikube)
+## Running with Kubernetes
 
 ```powershell
-# Start minikube
 minikube start
 
-# Build images into minikube's Docker daemon
+# Build images into minikube
 minikube docker-env | Invoke-Expression
 docker build -f docker/Dockerfile.backend  -t ids-backend:latest  .
 docker build -f docker/Dockerfile.frontend -t ids-frontend:latest .
 
-# Create secret (fill in base64 values first)
-# cp k8s/secret.template.yaml k8s/secret.yaml
-# kubectl apply -f k8s/secret.yaml
-
 # Apply all manifests
 kubectl apply -f k8s/
 
-# Access frontend
+# Access the dashboard
 minikube service ids-frontend
 
-# Scale inference manually
+# Scale the inference service manually
 kubectl scale deployment ids-backend --replicas=3
 
-# Watch HPA
+# Watch autoscaler
 kubectl get hpa ids-backend-hpa --watch
+```
+
+---
+
+## Simulating Traffic
+
+The simulator generates statistically-representative synthetic flows for all
+7 classes. Useful for testing the pipeline without live capture.
+
+```powershell
+# Generate 20 DDoS flows and run them through the active model
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/simulate" `
+  -Method POST -ContentType "application/json" `
+  -Body '{"class": "ddos", "count": 20}'
+
+# Available: normal, dos, ddos, probe, r2l, bot, web_attack
 ```
 
 ---
@@ -279,155 +365,85 @@ kubectl get hpa ids-backend-hpa --watch
 ## Running Tests
 
 ```powershell
-# Run all tests (skips model tests if train_model.py not run yet)
+# All tests (model tests skipped if models not trained)
 pytest
 
-# Run specific suite
+# Specific suites
 pytest tests/test_preprocessing.py -v
 pytest tests/test_simulator.py -v
-pytest tests/test_smoke.py -v
+pytest tests/test_api.py -v
+pytest tests/test_smoke.py -v  # requires running backend
+```
 
-# Run after training (all tests including model tests)
+---
+
+## Rebuilding the Dataset
+
+Run the pipeline again at any time with different sampling settings:
+
+```powershell
+# Default: 100k normal, 50k per attack class
+python backend/cicids_pipeline.py
+
+# Custom sampling
+python backend/cicids_pipeline.py --normal-samples 200000 --samples-per-class 100000
+
+# Preview without writing
+python backend/cicids_pipeline.py --dry-run
+
+# Then retrain
 python backend/model/train_model.py
-pytest
+python backend/train_anomaly.py
 ```
 
 ---
 
-## Dataset Setup and Collection
+## Analyst Feedback Loop
 
-### Inspect the existing dataset
-
-```powershell
-cd backend
-python inspect_dataset.py
-```
-
-### Collect new training data
+When an analyst marks an alert as a false positive, the system records the
+correction for future retraining:
 
 ```powershell
-# Collect normal traffic (5 seconds of loopback traffic)
-python -c "
-from url_kdd import capture_flows, save_flows_to_csv
-flows = capture_flows(capture_time=10)
-save_flows_to_csv(flows, 'data/live_flows.csv', label='normal')
-"
-
-# Collect probe traffic
-python -c "
-from url_kdd import capture_flows, generate_local_probe_traffic, save_flows_to_csv
-import threading, time
-flows = []
-def capture():
-    flows.extend(capture_flows(capture_time=10))
-t = threading.Thread(target=capture)
-t.start()
-time.sleep(1)
-generate_local_probe_traffic()
-t.join()
-save_flows_to_csv(flows, 'data/live_flows.csv', label='probe')
-"
-
-# Clean dataset (verify probe ports, separate unlabeled)
-python clean_dataset.py
-```
-
-### Collect independent test data
-
-Repeat the capture steps above but save to `data/test_flows.csv`.
-**Keep training and test data from separate capture sessions.**
-
----
-
-## Live Detection Demo
-
-```
-1.  python backend/app.py          ← start backend
-2.  cd frontend && npm run dev     ← start frontend
-3.  Open http://localhost:5173
-4.  Navigate to Network Monitor
-5.  Click "Capture & Detect"       ← captures 5s of loopback traffic
-6.  View predictions in the table
-7.  Switch capture mode to "Controlled Probe Test"
-8.  Click "Capture Probe"          ← generates port-scan + captures
-9.  Watch alert appear in Alerts page
-10. Open Insights to see:
-      - Active model performance metrics
-      - Per-class precision/recall/F1
-      - Confusion matrix
-      - Model comparison table (after training all 4 models)
-      - Detection latency trend chart
-```
-
----
-
-## Switching ML Models
-
-Via the Settings page in the frontend, or via API:
-
-```powershell
-# Switch to SVM
-Invoke-RestMethod -Uri "http://127.0.0.1:5000/settings" `
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/feedback" `
   -Method POST -ContentType "application/json" `
-  -Body '{"ml_model": "svm"}'
-
-# Switch to Hybrid Ensemble
-Invoke-RestMethod -Uri "http://127.0.0.1:5000/settings" `
-  -Method POST -ContentType "application/json" `
-  -Body '{"ml_model": "hybrid"}'
-
-# Check active model info
-Invoke-RestMethod http://127.0.0.1:5000/model/info
-
-# See full model comparison
-Invoke-RestMethod http://127.0.0.1:5000/model/comparison
+  -Body '{"alert_id": "<id>", "true_label": "normal"}'
 ```
 
----
-
-## Simulate Traffic (No Capture Required)
-
-```powershell
-# Generate 10 synthetic DoS flows and classify them
-Invoke-RestMethod -Uri "http://127.0.0.1:5000/simulate" `
-  -Method POST -ContentType "application/json" `
-  -Body '{"class": "dos", "count": 10}'
-```
-
-Supported classes: `normal`, `probe`, `dos`, `r2l`, `u2r`
+Corrections are appended to `backend/data/feedback.jsonl`. Include this file
+when rerunning `train_model.py` to improve accuracy over time.
 
 ---
 
 ## Research Documentation
 
-| Document | Contents |
+| Document | Description |
 |---|---|
-| [PROJECT_AUDIT.md](PROJECT_AUDIT.md) | Full repo audit: architecture, risks, missing items |
-| [JOURNAL_TRACEABILITY.md](JOURNAL_TRACEABILITY.md) | 142 journal requirements mapped to implementation |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System design, data flow, API reference, deployment |
-| [DATASET_DOCUMENTATION.md](DATASET_DOCUMENTATION.md) | 27-feature schema, preprocessing, methodology |
-| [DATASET_CHANGELOG.md](DATASET_CHANGELOG.md) | NSL-KDD → live-flow evolution, 6 documented changes |
-| [EXPERIMENTS.md](EXPERIMENTS.md) | Experiment templates (populate after training) |
-| [FINAL_RESULTS.md](FINAL_RESULTS.md) | Summary template (populate after training) |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Full system design, data flow, API reference, deployment |
+| [DATASET_DOCUMENTATION.md](DATASET_DOCUMENTATION.md) | 27-feature schema, CIC-IDS-2017 mapping, preprocessing |
+| [DATASET_CHANGELOG.md](DATASET_CHANGELOG.md) | Evolution from NSL-KDD → live-flow → CIC-IDS-2017 |
+| [EXPERIMENTS.md](EXPERIMENTS.md) | Experiment results with real measured values |
+| [FINAL_RESULTS.md](FINAL_RESULTS.md) | Complete results summary with all metrics |
+| [PROJECT_AUDIT.md](PROJECT_AUDIT.md) | Initial repository audit (pre-upgrade baseline) |
+| [JOURNAL_TRACEABILITY.md](JOURNAL_TRACEABILITY.md) | Journal requirement → implementation traceability |
+
+---
+
+## Security Notes
+
+- Never commit `.env`, `k8s/secret.yaml`, or `ids.db` to version control
+- Set `IDS_API_KEY` in production to protect all write endpoints
+- `IDS_DEBUG=true` must never be used in production (exposes Werkzeug debugger)
+- Live capture (`/capture`) is rate-limited to 10 requests/minute
+- Probe generator is restricted to `127.0.0.1` only
 
 ---
 
 ## Known Limitations
 
-- Training set is small (~115 samples) — metrics are not statistically stable
-- Probe traffic is highly uniform — accuracy is likely inflated
-- All data captured on Windows loopback — not equivalent to real network monitoring
-- Binary classification only (normal/probe) — live multi-class detection requires more data
-- Docker live capture requires special network configuration
-- Autoscaling benchmarks not yet measured on local hardware
-
-See [FINAL_RESULTS.md](FINAL_RESULTS.md) for the complete limitations table.
-
----
-
-## Important: What NOT to Do
-
-- Do not replace `live_flows.csv` or `test_flows.csv` with original NSL-KDD data
-- Do not manually edit `metrics_*.json` — always regenerate via `train_model.py`
-- Do not set `IDS_DEBUG=true` in production
-- Do not commit `.env` or `k8s/secret.yaml` to version control
+| Limitation | Impact |
+|---|---|
+| `bot` (60% precision) and `web_attack` (75% precision) | Low precision due to small training set for these classes (1.5k–1.6k rows vs. 40k for majority classes) |
+| `source_port` set to 0 for CIC data | Not present in CIC-IDS-2017; model relies on other features |
+| Live capture on Windows loopback only | Not equivalent to monitoring a real network adapter |
+| Autoscaling not benchmarked | K8s HPA manifests exist but scaling performance is undocumented |
+| IsolationForest 47.4% anomaly detection rate | Expected on real diverse traffic — anomaly layer supplements classifier, not replaces it |

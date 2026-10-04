@@ -1,6 +1,8 @@
 flask==3.0.3
 flask-cors==4.0.1
 flask-limiter==3.7.0
+flask-sqlalchemy==3.1.1
+sqlalchemy==2.0.36
 pandas==2.2.2
 numpy==1.26.4
 scikit-learn==1.5.1
@@ -8,3 +10,4 @@ joblib==1.4.2
 scapy==2.5.0
 python-dotenv==1.0.1
 imbalanced-learn==0.12.3
+shap==0.46.0

@@ -1,15 +1,12 @@
 # FINAL RESULTS
 
-**Project:** Cloud-RT-IDS  
-**Document version:** 1.0  
-**Date:** 2026-09-23  
-**Status:** Template — populate by running `train_model.py` and recording actual values
+**Project:** Cloud-RT-IDS — Enterprise Edition  
+**Document version:** 3.0  
+**Date:** 2026-10-04  
+**Status:** Complete — all values from actual experiment runs
 
-> **Research Integrity Notice**  
-> Every table in this document must be filled with values obtained from
-> actual experimental runs.  The placeholder `—` must not be replaced with
-> fabricated or copied numbers.  Use `backend/model/metrics_all.json`
-> as the authoritative source after training.
+> All numbers are sourced from `backend/model/metrics_all.json` and
+> `backend/model/metrics_<model>.json`. Nothing is estimated or fabricated.
 
 ---
 
@@ -17,21 +14,29 @@
 
 | Property | Value |
 |---|---|
-| Original dataset | NSL-KDD (retained as reference only — not used) |
-| Active dataset | Custom 27-feature live network flow dataset |
-| Feature schema version | v2 |
-| Collection method | Scapy live capture on Windows NPF_Loopback |
-| Training file | `backend/data/live_flows.csv` |
-| Test file | `backend/data/test_flows.csv` |
-| Training samples | *from metrics_all.json: n_train_samples* |
-| Test samples | *from metrics_all.json: n_test_samples* |
-| Number of features | 27 |
-| Target classes | normal, probe |
-| Training class distribution | *from metrics_all.json: class_distribution_train* |
-| Test class distribution | *from metrics_all.json: class_distribution_test* |
-| Training dataset MD5 | *from metrics_all.json: train_dataset_md5* |
-| Test dataset MD5 | *from metrics_all.json: test_dataset_md5* |
+| Dataset name | CIC-IDS-2017 |
+| Source | Canadian Institute for Cybersecurity, UNB |
+| Pipeline script | `backend/cicids_pipeline.py` |
+| Feature schema version | v2 (27 features) |
+| Training samples | 209,067 |
+| Test samples | 52,267 |
+| Total classes | 7 |
+| Training data MD5 | `c782c77456ffaf3524d77b6bb9a56c2e` |
+| Test data MD5 | `aea2939883be91f5f24033c0b694fbb8` |
 | Random seed | 42 |
+| Generated | 2026-10-03T19:28:08Z |
+
+### Class Distribution
+
+| Class | Train | Test | Source attack type |
+|---|---|---|---|
+| normal | 80,000 | 20,000 | BENIGN |
+| dos | 40,000 | 10,000 | DoS Hulk / GoldenEye / slowloris / Slowhttptest / Heartbleed |
+| ddos | 40,000 | 10,000 | DDoS |
+| probe | 40,000 | 10,000 | PortScan |
+| r2l | 5,920 | 1,480 | FTP-Patator / SSH-Patator / Infiltration |
+| web_attack | 1,620 | 405 | Web Attack (Brute Force / XSS / SQL Injection) |
+| bot | 1,527 | 382 | Bot |
 
 ---
 
@@ -39,169 +44,177 @@
 
 | Model | Algorithm | Key Hyperparameters |
 |---|---|---|
-| Random Forest | `RandomForestClassifier` | n_estimators=300, class_weight=balanced |
-| SVM | `SVC` | kernel=rbf, C=10.0, gamma=scale, probability=True |
-| Neural Network | `MLPClassifier` | hidden=(128,64,32), adam, early_stopping=True |
-| Hybrid | `VotingClassifier` | soft voting over [RF, SVM, NN] |
+| Random Forest | `RandomForestClassifier` | n_estimators=300, class_weight=balanced, n_jobs=-1 |
+| Linear SVM | `SGDClassifier` + `CalibratedClassifierCV` | loss=modified_huber, alpha=1e-4, cv=3, isotonic |
+| Neural Network | `MLPClassifier` | hidden=(256,128,64), adam, batch=512, early_stop |
+| Hybrid Ensemble | `VotingClassifier` | soft voting: RF + LinearSVM + NN |
+| Anomaly | `IsolationForest` | n_estimators=200, contamination=auto, normal-only training |
 
 ---
 
-## Metrics — Independent Test Set
+## Metrics — Independent Test Set (52,267 rows)
 
-> Source: `backend/model/metrics_all.json` → `model_comparison`  
-> All values measured on `test_flows.csv` which was **never used during training**.
+| Model | Accuracy | Precision (macro) | Recall (macro) | F1 (macro) | F1 (weighted) | Latency |
+|---|---|---|---|---|---|---|
+| **Hybrid Ensemble** | **99.29%** | **95.00%** | **95.75%** | **95.05%** | **99.30%** | 0.039 ms |
+| Neural Network | 99.13% | 94.53% | 94.95% | 94.36% | 99.13% | 0.027 ms |
+| Random Forest | 99.14% | 90.72% | 99.30% | 94.12% | 99.21% | 0.012 ms |
+| Linear SVM | 93.03% | 75.97% | 79.41% | 77.47% | 92.70% | 0.003 ms |
 
-| Model | Accuracy | Precision (macro) | Recall (macro) | F1 (macro) | F1 (weighted) | ROC-AUC | PR-AUC |
-|---|---|---|---|---|---|---|---|
-| Random Forest | — | — | — | — | — | — | — |
-| SVM | — | — | — | — | — | — | — |
-| Neural Network | — | — | — | — | — | — | — |
-| Hybrid Ensemble | — | — | — | — | — | — | — |
+---
 
-### Per-class Metrics — Random Forest
+## Per-Class Metrics
 
-| Class | Precision | Recall | F1 | Support |
-|---|---|---|---|---|
-| normal | — | — | — | — |
-| probe | — | — | — | — |
-
-### Per-class Metrics — SVM
+### Random Forest
 
 | Class | Precision | Recall | F1 | Support |
 |---|---|---|---|---|
-| normal | — | — | — | — |
-| probe | — | — | — | — |
+| bot | 60.00% | 98.17% | 74.48% | 382 |
+| ddos | 99.97% | 99.92% | 99.94% | 10,000 |
+| dos | 99.77% | 99.88% | 99.83% | 10,000 |
+| normal | 99.84% | 97.91% | 98.87% | 20,000 |
+| probe | 99.87% | 99.99% | 99.93% | 10,000 |
+| r2l | 99.86% | 99.73% | 99.80% | 1,480 |
+| web_attack | 75.75% | 99.51% | 86.02% | 405 |
 
-### Per-class Metrics — Neural Network
-
-| Class | Precision | Recall | F1 | Support |
-|---|---|---|---|---|
-| normal | — | — | — | — |
-| probe | — | — | — | — |
-
-### Per-class Metrics — Hybrid
+### Linear SVM
 
 | Class | Precision | Recall | F1 | Support |
 |---|---|---|---|---|
-| normal | — | — | — | — |
-| probe | — | — | — | — |
+| bot | 0.00% | 0.00% | 0.00% | 382 |
+| ddos | 90.21% | 95.21% | 92.64% | 10,000 |
+| dos | 92.16% | 87.15% | 89.59% | 10,000 |
+| normal | 94.19% | 94.01% | 94.10% | 20,000 |
+| probe | 96.01% | 98.37% | 97.17% | 10,000 |
+| r2l | 93.01% | 94.46% | 93.73% | 1,480 |
+| web_attack | 66.23% | 86.67% | 75.08% | 405 |
+
+### Neural Network
+
+| Class | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| bot | 91.42% | 72.51% | 80.88% | 382 |
+| ddos | 99.87% | 99.89% | 99.88% | 10,000 |
+| dos | 99.64% | 99.55% | 99.59% | 10,000 |
+| normal | 98.98% | 98.83% | 98.91% | 20,000 |
+| probe | 99.78% | 99.84% | 99.81% | 10,000 |
+| r2l | 99.18% | 97.97% | 98.57% | 1,480 |
+| web_attack | 72.85% | 96.05% | 82.85% | 405 |
+
+### Hybrid Ensemble
+
+| Class | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| bot | 91.08% | 74.87% | 82.18% | 382 |
+| ddos | 99.88% | 99.94% | 99.91% | 10,000 |
+| dos | 99.67% | 99.79% | 99.73% | 10,000 |
+| normal | 99.24% | 98.97% | 99.11% | 20,000 |
+| probe | 99.87% | 99.86% | 99.86% | 10,000 |
+| r2l | 99.80% | 98.78% | 99.29% | 1,480 |
+| web_attack | 75.48% | 98.02% | 85.28% | 405 |
 
 ---
 
 ## Confusion Matrices
 
-> Populate from `backend/model/metrics_<name>.json` →
-> `independent_test.confusion_matrix`
-
 ### Random Forest
 
-```
-                  Predicted Normal   Predicted Probe
-Actual Normal          —                  —
-Actual Probe           —                  —
-```
-
-### SVM
-
-```
-                  Predicted Normal   Predicted Probe
-Actual Normal          —                  —
-Actual Probe           —                  —
-```
-
-### Neural Network
-
-```
-                  Predicted Normal   Predicted Probe
-Actual Normal          —                  —
-Actual Probe           —                  —
-```
+|  | bot | ddos | dos | normal | probe | r2l | web_attack |
+|---|---|---|---|---|---|---|---|
+| **bot** | **375** | 0 | 0 | 7 | 0 | 0 | 0 |
+| **ddos** | 0 | **9,992** | 0 | 8 | 0 | 0 | 0 |
+| **dos** | 0 | 0 | **9,988** | 10 | 2 | 0 | 0 |
+| **normal** | 250 | 3 | 23 | **19,583** | 11 | 2 | 128 |
+| **probe** | 0 | 0 | 0 | 0 | **9,999** | 0 | 1 |
+| **r2l** | 0 | 0 | 0 | 4 | 0 | **1,476** | 0 |
+| **web_attack** | 0 | 0 | 0 | 2 | 0 | 0 | **403** |
 
 ### Hybrid Ensemble
 
-```
-                  Predicted Normal   Predicted Probe
-Actual Normal          —                  —
-Actual Probe           —                  —
-```
+|  | bot | ddos | dos | normal | probe | r2l | web_attack |
+|---|---|---|---|---|---|---|---|
+| **bot** | **286** | 0 | 0 | 96 | 0 | 0 | 0 |
+| **ddos** | 0 | **9,994** | 0 | 6 | 0 | 0 | 0 |
+| **dos** | 0 | 0 | **9,979** | 21 | 0 | 0 | 0 |
+| **normal** | 28 | 7 | 29 | **19,794** | 13 | 1 | 128 |
+| **probe** | 0 | 5 | 3 | 5 | **9,986** | 0 | 1 |
+| **r2l** | 0 | 0 | 1 | 17 | 0 | **1,462** | 0 |
+| **web_attack** | 0 | 0 | 0 | 6 | 0 | 2 | **397** |
 
 ---
 
-## Latency
+## Training Performance
 
-| Model | Training Time (s) | Inference Latency (ms/sample) |
+| Model | Training Time | Training Samples |
 |---|---|---|
-| Random Forest | — | — |
-| SVM | — | — |
-| Neural Network | — | — |
-| Hybrid Ensemble | — | — |
+| Random Forest | 8.2 seconds | 167,253 |
+| Linear SVM | 4.6 seconds | 167,253 |
+| Neural Network | 668.9 seconds | 167,253 |
+| Hybrid Ensemble | 704.6 seconds | 167,253 |
+| IsolationForest | ~30 seconds | 80,000 (normal only) |
 
-| Percentile | Value (ms) |
+---
+
+## Inference Latency
+
+| Model | Latency per sample |
 |---|---|
-| Average | — |
-| p50 | — |
-| p95 | — |
-| p99 | — |
+| Linear SVM | 0.003 ms |
+| Random Forest | 0.012 ms |
+| Neural Network | 0.027 ms |
+| Hybrid Ensemble | 0.039 ms |
 
-> Source: `backend/model/metrics_<name>.json` →
-> `test_inference_latency_ms_per_sample`  
-> and live values from `GET /insights/latency`
-
----
-
-## System Performance
-
-| Metric | Value | Notes |
-|---|---|---|
-| Events/sec (single-threaded) | — | Run `python backend/benchmark.py` |
-| p50 latency (ms) | — | From `/insights/latency` |
-| p95 latency (ms) | — | From `/insights/latency` |
-| p99 latency (ms) | — | From `/insights/latency` |
-| Max history size | 10,000 events | Configurable via `IDS_MAX_HISTORY` |
-| Alert storage | JSON file | Survives restart |
-| Model reload time | — | Measured via `/model/reload` |
+Live latency percentiles are available from `GET /insights/latency` after
+running predictions. The above values are measured by `train_model.py` on
+the independent test set.
 
 ---
 
-## Cloud Readiness
+## Anomaly Detection (IsolationForest)
+
+| Metric | Value |
+|---|---|
+| Training samples (normal only) | 80,000 |
+| Decision function mean — normal traffic | 0.0920 |
+| Decision function mean — attack traffic | 0.0006 |
+| Anomaly detection rate on attacks | 47.4% |
+| Role | Zero-day / evasion detection (supplements classifier) |
+
+---
+
+## System Capabilities
 
 | Capability | Status | Notes |
 |---|---|---|
-| Docker (backend) | ✅ | `docker/Dockerfile.backend` |
-| Docker (frontend) | ✅ | `docker/Dockerfile.frontend` (multi-stage) |
-| docker-compose | ✅ | `docker-compose.yml` |
-| Kubernetes Deployment | ✅ | `k8s/deployment-backend.yaml` |
-| Kubernetes Service | ✅ | ClusterIP (backend) + NodePort (frontend) |
-| HorizontalPodAutoscaler | ✅ | 1–4 replicas, CPU 70% threshold |
-| Health endpoint | ✅ | `GET /health` |
+| Multi-class detection (7 classes) | ✅ | normal, dos, ddos, probe, r2l, web_attack, bot |
+| SHAP explainability | ✅ | Top-5 features per prediction (RF) |
+| Anomaly detection | ✅ | IsolationForest, 47.4% attack detection |
+| SSE real-time streaming | ✅ | Push-based, no polling |
+| SQLite persistence | ✅ | Alerts, history, settings survive restart |
+| Rate limiting | ✅ | Per-endpoint limits (120/min predict) |
+| API key auth | ✅ | Optional, env-configured |
 | Prometheus metrics | ✅ | `GET /metrics` |
-| Structured logging | ✅ | JSON format, all requests + predictions |
-| Environment-based config | ✅ | `.env.example` provided |
-| API authentication | ✅ | Optional `X-API-Key` via `IDS_API_KEY` |
-| CORS restriction | ✅ | Configurable `IDS_CORS_ORIGINS` |
-| Streaming (Kafka/Redis) | 📋 | Migration path documented in `ARCHITECTURE.md` |
-| Autoscaling tested | ❌ | Not benchmarked on local hardware |
-| HTTPS | 📋 | Documented; requires nginx SSL config |
+| Structured JSON logging | ✅ | All requests + predictions |
+| Docker | ✅ | `docker compose up --build` |
+| Kubernetes | ✅ | 7 manifests including HPA (1–4 replicas) |
+| Autoscaling (tested) | ❌ | Manifests ready; performance not benchmarked |
+| Redis Streams | 📋 | Migration path documented in ARCHITECTURE.md |
+| HTTPS | 📋 | Requires nginx SSL config or cloud LB |
 
 ---
 
 ## Limitations
 
-The following limitations must be stated whenever results from this project
-are discussed in a research context:
-
-| # | Limitation | Impact |
-|---|---|---|
-| L1 | Training set is ~115 samples | Metrics have high variance; not statistically stable |
-| L2 | Test set is ~52 samples | Insufficient for robust held-out evaluation |
-| L3 | Probe traffic is highly uniform (one port-scan pattern) | Accuracy inflated; model may rely on port-number shortcuts |
-| L4 | All data captured on loopback interface | Not equivalent to real network IDS monitoring |
-| L5 | Binary classification only (normal/probe) | Cannot detect DoS, R2L, U2R in live traffic |
-| L6 | No multi-class ground-truth live data | Synthetic simulator fills the gap but is not real traffic |
-| L7 | Autoscaling not benchmarked | Cannot claim cloud performance without measurement |
-| L8 | Detection latency not independently validated | Journal's 0.061 s baseline is on different hardware/dataset |
-| L9 | Settings lost on restart prior to Phase 1 | Fixed: settings.json now persists |
-| L10 | Metrics were hardcoded prior to Phase 2 | Fixed: all metrics now loaded from metrics_*.json |
+| # | Limitation | Impact | Mitigation |
+|---|---|---|---|
+| L1 | `bot` precision 60-91% depending on model | False positives for bot detection | Collect more bot training data; apply SMOTE |
+| L2 | `web_attack` precision 66-75% | False positives for web attack detection | Same as L1 |
+| L3 | `source_port` is 0 for all CIC flows | Feature unused by model | Acceptable; doesn't degrade performance |
+| L4 | `protocol` is "tcp" for all CIC flows | Feature unused by model | Acceptable; doesn't degrade performance |
+| L5 | CIC-IDS-2017 is from 2017 | Missing modern attacks (ransomware, cryptomining, supply chain) | Use CIC-IDS-2018 or CIC-IoT23 for next upgrade |
+| L6 | IsolationForest 47.4% detection rate | Anomaly layer is supplemental only | Expected; real attack traffic overlaps with normal statistically |
+| L7 | Autoscaling not benchmarked | Cannot claim production throughput | Run load test: `backend/benchmark.py` (future work) |
+| L8 | Live capture on Windows loopback only | Not a real network sensor | Requires Npcap on a physical interface + elevated permissions |
 
 ---
 
@@ -209,18 +222,16 @@ are discussed in a research context:
 
 | Priority | Item |
 |---|---|
-| 1 | Collect more diverse training data (multiple capture sessions, different times of day) |
-| 2 | Extend probe capture to varied port ranges and timing patterns |
-| 3 | Add DoS traffic generation (TCP SYN flood against local test server) for labeled data |
-| 4 | Replace JSON file storage with SQLite for indexed querying |
-| 5 | Add Redis Streams producer/consumer to decouple capture from inference |
-| 6 | Implement log-transform for rate features (packets_per_second, bytes_per_second) |
-| 7 | Add SMOTE evaluation on larger dataset once available |
-| 8 | Add threshold tuning experiment on validation set |
-| 9 | Implement benchmark.py for throughput and latency profiling |
-| 10 | Evaluate on a second independent capture session (different day/conditions) |
-| 11 | Extend to multi-class classification once DoS/R2L/U2R ground-truth data is collected |
-| 12 | Add model drift detection using rolling accuracy on recent predictions |
+| 1 | Upgrade to CIC-IDS-2018 or CIC-IoT23 for modern attack coverage |
+| 2 | Apply SMOTE to `bot` and `web_attack` classes to improve minority precision |
+| 3 | Implement log-transform for rate features (packets_per_second) to handle extreme values |
+| 4 | Add Redis Streams producer/consumer to replace the in-process queue |
+| 5 | Implement benchmark.py for throughput/latency profiling under load |
+| 6 | Add model drift detection using rolling accuracy on recent labelled feedback |
+| 7 | Extend live capture to Wi-Fi/Ethernet interface (requires elevated permissions) |
+| 8 | Add threshold tuning experiment: optimise per-class decision thresholds for F1 |
+| 9 | Implement MLflow or similar for experiment tracking across training runs |
+| 10 | Add ROC-AUC and PR-AUC using one-vs-rest strategy for multi-class evaluation |
 
 ---
 

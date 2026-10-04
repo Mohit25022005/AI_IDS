@@ -33,203 +33,289 @@
   ],
   "n_features": 27,
   "classes": [
+    "bot",
+    "ddos",
     "dos",
     "normal",
     "probe",
     "r2l",
-    "u2r"
+    "web_attack"
   ],
   "hyperparameters": {
     "voting": "soft",
     "estimators": [
       "random_forest",
-      "svm",
+      "linear_svm",
       "neural_network"
     ],
     "strategy": "average_of_class_probabilities"
   },
   "random_seed": 42,
-  "training_timestamp": "2026-10-03T17:53:36.535862Z",
-  "training_time_seconds": 0.934,
-  "n_train_samples": 452,
-  "n_val_samples": 113,
-  "n_test_samples": 252,
-  "train_dataset_md5": "a560a471d6a3ce2494287d2d3347e6d3",
-  "test_dataset_md5": "2acfa3bbbbcb8204f5dbde9aace31402",
-  "val_inference_latency_ms_per_sample": 1.1091,
-  "test_inference_latency_ms_per_sample": 0.5351,
+  "training_timestamp": "2026-10-03T19:28:08.083884Z",
+  "training_time_seconds": 704.625,
+  "n_train_samples": 167253,
+  "n_val_samples": 41814,
+  "n_test_samples": 52267,
+  "train_dataset_md5": "c782c77456ffaf3524d77b6bb9a56c2e",
+  "test_dataset_md5": "aea2939883be91f5f24033c0b694fbb8",
+  "val_inference_latency_ms_per_sample": 0.042,
+  "test_inference_latency_ms_per_sample": 0.0391,
   "validation": {
     "split": "validation",
-    "n_samples": 113,
-    "accuracy": 0.9912,
-    "precision_macro": 0.9905,
-    "recall_macro": 0.9818,
-    "f1_macro": 0.9856,
-    "f1_weighted": 0.991,
+    "n_samples": 41814,
+    "accuracy": 0.9919,
+    "precision_macro": 0.9443,
+    "recall_macro": 0.9519,
+    "f1_macro": 0.9438,
+    "f1_weighted": 0.992,
     "roc_auc": null,
     "pr_auc": null,
     "per_class": {
+      "bot": {
+        "precision": 0.9177,
+        "recall": 0.7288,
+        "f1": 0.8124,
+        "support": 306
+      },
+      "ddos": {
+        "precision": 0.9986,
+        "recall": 0.9994,
+        "f1": 0.999,
+        "support": 8000
+      },
       "dos": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 40
+        "precision": 0.9953,
+        "recall": 0.9984,
+        "f1": 0.9968,
+        "support": 8000
       },
       "normal": {
-        "precision": 1.0,
-        "recall": 0.9091,
-        "f1": 0.9524,
-        "support": 11
+        "precision": 0.9919,
+        "recall": 0.9881,
+        "f1": 0.99,
+        "support": 16000
       },
       "probe": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 12
+        "precision": 0.9989,
+        "recall": 0.998,
+        "f1": 0.9984,
+        "support": 8000
       },
       "r2l": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 30
+        "precision": 0.9983,
+        "recall": 0.9848,
+        "f1": 0.9915,
+        "support": 1184
       },
-      "u2r": {
-        "precision": 0.9524,
-        "recall": 1.0,
-        "f1": 0.9756,
-        "support": 20
+      "web_attack": {
+        "precision": 0.7098,
+        "recall": 0.966,
+        "f1": 0.8183,
+        "support": 324
       }
     },
     "confusion_matrix": [
       [
-        40,
+        223,
         0,
+        0,
+        83,
         0,
         0,
         0
       ],
       [
         0,
-        10,
+        7995,
+        1,
+        4,
         0,
-        0,
-        1
-      ],
-      [
-        0,
-        0,
-        12,
         0,
         0
       ],
       [
         0,
         0,
+        7987,
+        13,
         0,
-        30,
+        0,
+        0
+      ],
+      [
+        20,
+        8,
+        28,
+        15809,
+        9,
+        0,
+        126
+      ],
+      [
+        0,
+        3,
+        7,
+        4,
+        7984,
+        0,
+        2
+      ],
+      [
+        0,
+        0,
+        1,
+        17,
+        0,
+        1166,
         0
       ],
       [
         0,
         0,
+        1,
+        8,
         0,
-        0,
-        20
+        2,
+        313
       ]
     ],
     "confusion_matrix_labels": [
+      "bot",
+      "ddos",
       "dos",
       "normal",
       "probe",
       "r2l",
-      "u2r"
+      "web_attack"
     ]
   },
   "independent_test": {
     "split": "independent_test",
-    "n_samples": 252,
-    "accuracy": 0.996,
-    "precision_macro": 0.9957,
-    "recall_macro": 0.992,
-    "f1_macro": 0.9937,
-    "f1_weighted": 0.996,
+    "n_samples": 52267,
+    "accuracy": 0.9929,
+    "precision_macro": 0.95,
+    "recall_macro": 0.9575,
+    "f1_macro": 0.9505,
+    "f1_weighted": 0.993,
     "roc_auc": null,
     "pr_auc": null,
     "per_class": {
+      "bot": {
+        "precision": 0.9108,
+        "recall": 0.7487,
+        "f1": 0.8218,
+        "support": 382
+      },
+      "ddos": {
+        "precision": 0.9988,
+        "recall": 0.9994,
+        "f1": 0.9991,
+        "support": 10000
+      },
       "dos": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 90
+        "precision": 0.9967,
+        "recall": 0.9979,
+        "f1": 0.9973,
+        "support": 10000
       },
       "normal": {
-        "precision": 1.0,
-        "recall": 0.96,
-        "f1": 0.9796,
-        "support": 25
+        "precision": 0.9924,
+        "recall": 0.9897,
+        "f1": 0.9911,
+        "support": 20000
       },
       "probe": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 27
+        "precision": 0.9987,
+        "recall": 0.9986,
+        "f1": 0.9986,
+        "support": 10000
       },
       "r2l": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 65
+        "precision": 0.998,
+        "recall": 0.9878,
+        "f1": 0.9929,
+        "support": 1480
       },
-      "u2r": {
-        "precision": 0.9783,
-        "recall": 1.0,
-        "f1": 0.989,
-        "support": 45
+      "web_attack": {
+        "precision": 0.7548,
+        "recall": 0.9802,
+        "f1": 0.8528,
+        "support": 405
       }
     },
     "confusion_matrix": [
       [
-        90,
+        286,
         0,
+        0,
+        96,
         0,
         0,
         0
       ],
       [
         0,
-        24,
+        9994,
         0,
+        6,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        9979,
+        21,
+        0,
+        0,
+        0
+      ],
+      [
+        28,
+        7,
+        29,
+        19794,
+        13,
+        1,
+        128
+      ],
+      [
+        0,
+        5,
+        3,
+        5,
+        9986,
         0,
         1
       ],
       [
         0,
         0,
-        27,
+        1,
+        17,
         0,
+        1462,
         0
       ],
       [
         0,
         0,
         0,
-        65,
-        0
-      ],
-      [
+        6,
         0,
-        0,
-        0,
-        0,
-        45
+        2,
+        397
       ]
     ],
     "confusion_matrix_labels": [
+      "bot",
+      "ddos",
       "dos",
       "normal",
       "probe",
       "r2l",
-      "u2r"
+      "web_attack"
     ]
   },
   "feature_importances": null

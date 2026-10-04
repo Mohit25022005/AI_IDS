@@ -1,53 +1,55 @@
 # ARCHITECTURE
 
 **Project:** Cloud-RT-IDS  
-**Document version:** 2.0  
-**Date:** 2026-09-23
+**Version:** 3.0 — Enterprise Edition  
+**Date:** 2026-10-04
 
 ---
 
 ## 1. System Overview
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                     Cloud-RT-IDS  v2                            │
-│                                                                  │
-│  ┌─────────────────┐     ┌────────────────────────────────────┐ │
-│  │  Traffic Source │     │           React Frontend           │ │
-│  │                 │     │  Dashboard · Monitor · Insights    │ │
-│  │  Live Scapy     │     │  Alerts · Settings                 │ │
-│  │  Capture  OR    │     └──────────────┬─────────────────────┘ │
-│  │  Synthetic      │                    │  HTTP (polling / SSE) │
-│  │  Simulator      │                    ▼                       │
-│  └────────┬────────┘     ┌────────────────────────────────────┐ │
-│           │              │        Flask REST API               │ │
-│           │ POST /capture│  /predict  /capture  /simulate     │ │
-│           └─────────────►│  /alerts  /insights  /health       │ │
-│                          │  /metrics  /model/info             │ │
-│                          └──────────────┬─────────────────────┘ │
-│                                         │                       │
-│                          ┌──────────────▼─────────────────────┐ │
-│                          │      Inference Engine              │ │
-│                          │                                    │ │
-│                          │  Random Forest  (model_rf.pkl)     │ │
-│                          │  SVM            (model_svm.pkl)    │ │
-│                          │  Neural Network (model_nn.pkl)     │ │
-│                          │  Hybrid Ensemble(model_hybrid.pkl) │ │
-│                          │                                    │ │
-│                          │  Active model selected via         │ │
-│                          │  /settings  ml_model key          │ │
-│                          └──────────────┬─────────────────────┘ │
-│                                         │                       │
-│                    ┌────────────────────┼──────────────────┐   │
-│                    │                    │                   │   │
-│                    ▼                    ▼                   ▼   │
-│           ┌──────────────┐  ┌─────────────────┐  ┌──────────┐ │
-│           │ Alert Engine │  │ Prediction Hist │  │ settings │ │
-│           │ severity map │  │ (JSON, 10k cap) │  │  .json   │ │
-│           │ uuid4 IDs    │  │                 │  │          │ │
-│           │ alerts.json  │  │ history.json    │  │          │ │
-│           └──────────────┘  └─────────────────┘  └──────────┘ │
-└──────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Cloud-RT-IDS  v3                             │
+│                                                                     │
+│  ┌──────────────────┐         ┌──────────────────────────────────┐  │
+│  │  Traffic Source  │         │        React Frontend            │  │
+│  │                  │         │  Dashboard · Monitor · Insights  │  │
+│  │  Live Scapy  OR  │         │  Alerts  · Settings              │  │
+│  │  /simulate   OR  │         └────────────┬─────────────────────┘  │
+│  │  REST /predict   │                      │ HTTP + SSE             │
+│  └────────┬─────────┘                      ▼                        │
+│           │                  ┌──────────────────────────────────┐   │
+│           └────────────────► │      Flask REST API  v3          │   │
+│                              │  Rate limiting · API Key auth    │   │
+│                              │  JSON structured logging         │   │
+│                              └────────────┬─────────────────────┘   │
+│                                           │                         │
+│                           ┌───────────────▼──────────────────────┐  │
+│                           │         Inference Engine             │  │
+│                           │                                      │  │
+│                           │  ┌─────────────┐  ┌───────────────┐ │  │
+│                           │  │  Classifier  │  │ IsolationForest│ │  │
+│                           │  │  RF/SVM/NN/  │  │  (zero-day    │ │  │
+│                           │  │  Hybrid      │  │   anomaly)    │ │  │
+│                           │  └──────┬───────┘  └───────┬───────┘ │  │
+│                           │         │  SHAP top-5       │ score   │  │
+│                           └─────────┼───────────────────┼─────────┘  │
+│                                     │                   │            │
+│                           ┌─────────▼───────────────────▼─────────┐  │
+│                           │          Alert Engine                  │  │
+│                           │  severity · risk · uuid4 ID           │  │
+│                           └────────────────┬──────────────────────┘  │
+│                                            │                         │
+│                    ┌───────────────────────┼───────────────────┐     │
+│                    ▼                       ▼                   ▼     │
+│           ┌──────────────┐       ┌──────────────┐    ┌──────────────┐│
+│           │   SQLite DB  │       │  SSE Stream  │    │  Prometheus  ││
+│           │  alerts      │       │  /stream/    │    │  /metrics    ││
+│           │  history     │       │  alerts      │    │              ││
+│           │  settings    │       │              │    │              ││
+│           └──────────────┘       └──────────────┘    └──────────────┘│
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -56,21 +58,25 @@
 
 | Component | File(s) | Technology | Role |
 |---|---|---|---|
-| Packet capture | `backend/url_kdd.py` | Scapy 2.5 | Capture live flows on loopback |
-| Flow builder | `backend/url_kdd.py` | Python dataclass | Bidirectional flow aggregation |
+| Data pipeline | `backend/cicids_pipeline.py` | pandas, NumPy | CIC-IDS-2017 → 27-feature CSV |
+| Packet capture | `backend/url_kdd.py` | Scapy 2.5 | Live bidirectional flow capture |
 | Feature extractor | `backend/url_kdd.py` | NumPy | 27-feature vector per flow |
-| Traffic simulator | `backend/simulator.py` | Python + NumPy | Synthetic flows for all 5 classes |
-| Training pipeline | `backend/model/train_model.py` | scikit-learn 1.5 | RF + SVM + NN + Hybrid |
-| Preprocessing | embedded in `.pkl` Pipelines | scikit-learn | StandardScaler + OHE |
-| Inference engine | `backend/app.py` | Flask + joblib | Model routing + latency |
-| Alert engine | `backend/app.py` | Python | Severity map, uuid4 IDs |
-| Persistence | `backend/data/*.json` | JSON files | Alerts, history, settings |
-| REST API | `backend/app.py` | Flask 3.0 + flask-cors | 18 endpoints |
+| Synthetic simulator | `backend/simulator.py` | Python + NumPy | 7-class synthetic flow generator |
+| Classifier training | `backend/model/train_model.py` | scikit-learn 1.5 | RF + LinearSVM + MLP + Hybrid |
+| Anomaly training | `backend/train_anomaly.py` | scikit-learn 1.5 | IsolationForest on normal-only |
+| Preprocessing | Embedded in `.pkl` Pipelines | scikit-learn | StandardScaler + OHE |
+| SHAP explainability | Inline in `app.py` | shap 0.46 | Top-5 feature contributions per prediction |
+| Inference engine | `backend/app.py` | Flask 3.0 + joblib | Model routing + latency + anomaly scoring |
+| Alert engine | `backend/app.py` | Python | Severity map, uuid4 IDs, SSE broadcast |
+| SSE broadcaster | `backend/app.py` | Flask streaming | Real-time alert push to all subscribers |
+| Database | `backend/data/ids.db` | SQLite + SQLAlchemy | Alerts, history, settings |
+| Rate limiter | `backend/app.py` | flask-limiter | Per-endpoint request rate limits |
+| REST API | `backend/app.py` | Flask 3.0 + flask-cors | 21 endpoints |
 | Structured logging | `backend/app.py` | Python logging (JSON) | All requests + predictions |
-| Frontend | `frontend/src/` | React 18 + Vite 5 + TS | Dashboard + monitoring UI |
-| Charts | `frontend/src/` | Recharts 2 | Time-series + bar + pie + line |
+| Frontend | `frontend/src/` | React 18 + Vite 5 + TypeScript | Security operations dashboard |
+| Charts | `frontend/src/` | Recharts 2 | Time-series, bar, pie, line charts |
 | Containerisation | `docker/` | Docker + nginx | Backend + frontend images |
-| Orchestration | `k8s/` | Kubernetes | Deployments + HPA |
+| Orchestration | `k8s/` | Kubernetes | Deployments + Services + HPA |
 | Tests | `tests/` | pytest | Unit + integration + smoke |
 
 ---
@@ -81,234 +87,329 @@
 
 ```
 \Device\NPF_Loopback (Windows Npcap)
-          │
-          ▼
-Scapy sniff()  →  process_packet()
-          │
-          ▼
-NetworkFlow dataclass  (accumulated per flow key)
-          │
-          ▼
-build_feature_vector()  →  27-feature dict
-          │
-          ▼
+            │
+            ▼
+Scapy sniff() → process_packet()
+            │
+            ▼
+NetworkFlow dataclass (accumulated per flow key)
+            │
+            ▼
+build_feature_vector() → 27-feature dict
+            │
+            ▼
 pd.DataFrame(27 cols)
-          │
-          ▼
-pipeline.predict()  +  pipeline.predict_proba()
-          │
-     perf_counter timing  →  latency_ms
-          │
-     ┌────┴────┐
-     ▼         ▼
-prediction   confidence
+            │
+     ┌──────┴──────────────────────┐
+     ▼                             ▼
+pipeline.predict()          _anomaly_model
++ predict_proba()           .decision_function()
+     │                             │
+     ▼                             ▼
+prediction + confidence      anomaly_score (0-1)
      │
-     ├──► prediction_history.json  (capped 10k)
+     ▼
+_compute_shap_top5()   (RF only — TreeExplainer)
+     │
+     ▼
+latency_ms measured via perf_counter
+     │
+     ├──► HistoryRow → SQLite
      │
      └──► if non-normal AND confidence ≥ threshold:
-              Alert object (uuid4 id, severity, event_id)
-                  │
-                  ▼
-              alerts.json
+               AlertRow(uuid4 id, severity, shap_top5, anomaly_score)
+                    │
+                    ├──► SQLite
+                    └──► SSE broadcast → all connected clients
 ```
 
-### 3.2 Manual Prediction Path
+### 3.2 REST Predict Path
 
 ```
 POST /predict  { "features": {...27 features...} }
      │
      ▼
-Input validation (type, enum, completeness)
+Input validation (type checking, protocol enum)
      │
      ▼
-pd.DataFrame  →  active_model().predict()
+pd.DataFrame → classifier → SHAP → anomaly score
      │
      ▼
-Return: prediction, confidence, latency_ms, event_id
+Return: prediction, confidence, latency_ms, shap_top5, anomaly_score, alert
 ```
 
-### 3.3 Training Pipeline
+### 3.3 SSE Alert Stream
 
 ```
-live_flows.csv  +  test_flows.csv
+GET /stream/alerts
      │
      ▼
-clean_dataset()  →  lowercase labels, drop NaN, coerce numerics
+Register Queue in _alert_subscribers list
+     │
+     ├── Initial replay: last 50 alerts from SQLite
      │
      ▼
-train_test_split(stratify, 80/20, seed=42)
-     │
-     ▼
-ColumnTransformer: StandardScaler(26) + OHE(1)
-     │
-     ├──► RandomForestClassifier(300 trees, balanced)
-     ├──► SVC(rbf, C=10, probability=True, balanced)
-     ├──► MLPClassifier(128-64-32, adam, early_stop)
-     └──► VotingClassifier(soft, RF+SVM+NN)
+Event loop (blocking generator):
+  - q.get(timeout=15) → "data: {...}\n\n"
+  - queue.Empty timeout → ": heartbeat\n\n"
+  - GeneratorExit → deregister queue
+```
+
+### 3.4 Training Pipeline
+
+```
+MachineLearningCSV/ (2.83M rows, 8 CSVs)
           │
           ▼
-For each model:
-  - metrics_<name>.json  (full metrics, MD5, schema version)
-  - model_<name>.pkl
+cicids_pipeline.py
+  → map 79 CIC cols → 27 features
+  → label normalisation
+  → clean NaN/Inf
+  → remove 549,968 duplicates
+  → balance: normal=100k, attacks=50k cap
+  → stratified 80/20 split
           │
           ▼
-metrics_all.json  (comparison table + default model metrics)
+live_flows.csv (209,067 rows) + test_flows.csv (52,267 rows)
           │
           ▼
-experiments/baseline/<timestamp>/  (archived run)
+train_model.py
+  → ColumnTransformer (StandardScaler + OHE)
+  → RF (300 trees, balanced)
+  → LinearSVM (SGD modified_huber + CalibratedClassifierCV)
+  → MLP (256-128-64, adam, early_stopping)
+  → Hybrid VotingClassifier (soft: RF+SVM+MLP)
+  → save model_*.pkl + metrics_*.json + metrics_all.json
+          │
+          ▼
+train_anomaly.py
+  → normal-only subset (80,000 rows)
+  → IsolationForest (200 estimators, contamination=auto)
+  → save model_anomaly.pkl + metrics_anomaly.json
 ```
 
 ---
 
-## 4. API Endpoint Reference
+## 4. API Reference
 
-| Endpoint | Method | Auth | Description |
+| Endpoint | Method | Rate limit | Description |
 |---|---|---|---|
-| `/` | GET | — | Health message |
-| `/health` | GET | — | Structured health: model, uptime, latency |
-| `/metrics` | GET | — | Prometheus-compatible text metrics |
-| `/predict` | POST | ✓ | Single-flow inference |
-| `/capture` | POST | ✓ | Live Scapy capture + inference |
-| `/simulate` | POST | ✓ | Synthetic flow generation + inference |
-| `/monitor/history` | GET | ✓ | Paginated prediction history |
-| `/alerts` | GET | ✓ | Paginated + filtered alerts |
-| `/alerts/<id>` | PATCH | ✓ | Update alert status |
+| `/` | GET | — | Version check |
+| `/health` | GET | — | Model status, uptime, anomaly model, SQLite, latency |
+| `/metrics` | GET | — | Prometheus text format |
+| `/stream/alerts` | GET | — | SSE — real-time alert push |
+| `/predict` | POST | 120/min | Inference + SHAP + anomaly score |
+| `/capture` | POST | 10/min | Live Scapy capture + inference |
+| `/simulate` | POST | 30/min | Synthetic flow generation + inference |
+| `/feedback` | POST | 60/min | Analyst label correction |
+| `/monitor/history` | GET | 300/min | Paginated + filtered prediction history |
+| `/alerts` | GET | 300/min | Paginated + filtered alerts |
+| `/alerts/<id>` | PATCH | 300/min | Update alert status |
 | `/settings` | GET | — | Current IDS settings |
-| `/settings` | POST | ✓ | Update settings (persisted) |
+| `/settings` | POST | 300/min | Update settings (SQLite-persisted) |
 | `/model/info` | GET | — | Active model metadata + metrics |
-| `/model/comparison` | GET | — | All models comparison table |
-| `/model/reload` | POST | ✓ | Reload model artifacts from disk |
-| `/model/reset` | POST | ✓ | Reset to defaults + reload |
-| `/insights/metrics` | GET | — | Active model test metrics |
+| `/model/comparison` | GET | — | All-model comparison table |
+| `/model/reload` | POST | — | Reload all .pkl from disk |
+| `/model/reset` | POST | — | Reset to defaults |
+| `/insights/metrics` | GET | — | Test metrics for active model |
 | `/insights/metrics/perclass` | GET | — | Per-class precision/recall/F1 |
 | `/insights/confusion` | GET | — | Confusion matrix (dynamic) |
 | `/insights/traffic` | GET | — | Live prediction class counts |
 | `/insights/latency` | GET | — | Latency samples + p50/p95/p99 |
 
-Auth ✓ = requires `X-API-Key` header when `IDS_API_KEY` env variable is set.
-
 ---
 
-## 5. ML Model Architecture
+## 5. ML Architecture
 
-### 5.1 Preprocessing (shared by all models)
+### 5.1 Preprocessing
 
 ```
 Input: 27 features per flow
 
 ColumnTransformer
-  ├── StandardScaler        → 26 numeric features
-  └── OneHotEncoder         → 1 categorical (protocol → 3 columns)
-      handle_unknown=ignore    tcp / udp / other
+  ├── StandardScaler           → 26 numeric features (fit on X_train only)
+  └── OneHotEncoder            → 1 categorical (protocol → 3 columns)
+      handle_unknown="ignore"    tcp / udp / other
 
-Output: dense feature matrix (29 values after OHE expansion)
+Output: 29-column dense matrix
 ```
 
 ### 5.2 Model Specifications
 
-| Model | Class | Key Parameters |
-|---|---|---|
-| Random Forest | `RandomForestClassifier` | n_estimators=300, class_weight=balanced, random_state=42 |
-| SVM | `SVC` | kernel=rbf, C=10.0, gamma=scale, probability=True, class_weight=balanced |
-| Neural Network | `MLPClassifier` | hidden=(128,64,32), relu, adam, alpha=1e-4, early_stopping=True |
-| Hybrid | `VotingClassifier` | voting=soft, estimators=[RF, SVM, NN] |
+| Model | Algorithm | Key Parameters | Test Accuracy | F1 Macro | Latency |
+|---|---|---|---|---|---|
+| Random Forest | `RandomForestClassifier` | n_estimators=300, class_weight=balanced | 99.14% | 94.12% | 0.012 ms |
+| Linear SVM | `SGDClassifier` + `CalibratedClassifierCV` | loss=modified_huber, alpha=1e-4, cv=3 | 93.03% | 77.47% | 0.003 ms |
+| Neural Network | `MLPClassifier` | hidden=(256,128,64), adam, batch=512, early_stop | 99.13% | 94.36% | 0.027 ms |
+| **Hybrid** | `VotingClassifier` | soft voting over [RF, SVM, NN] | **99.29%** | **95.05%** | 0.039 ms |
+| Anomaly | `IsolationForest` | n_estimators=200, contamination=auto | — | — | — |
 
 ### 5.3 Ensemble Strategy
 
-The Hybrid model uses **soft voting**: class probabilities from each base
-estimator are averaged. The class with the highest mean probability is the
-final prediction. Confidence is `max(averaged_proba)`.
+The Hybrid model uses **soft voting**: class probabilities from all three base
+estimators are averaged. The class with the highest mean probability wins.
+Confidence = `max(averaged_proba)`.
 
-This is preferred over majority voting because:
-- It preserves uncertainty information from each model
-- It is more robust when one model is less confident
-- It is supported natively by scikit-learn's VotingClassifier
+Preferred over hard voting because it preserves uncertainty from each model
+and degrades gracefully when one estimator is less confident.
+
+### 5.4 Anomaly Detection Layer
+
+The `IsolationForest` is trained **on normal traffic only**. During inference:
+
+- `decision_function(X)` returns a score; lower = more anomalous
+- Normalised to 0–1 range via `score = clamp(0.5 - raw, 0, 1)`
+- If classifier predicts "normal" but `anomaly_score > 0.75`: fire an **Anomaly Detection** alert
+- This catches zero-days and evasion attempts that fool the classifier
+
+Detection rate on CIC attack traffic: **47.4%** (honest — real attacks often
+resemble normal traffic statistically).
+
+### 5.5 SHAP Explainability
+
+For Random Forest predictions only (TreeExplainer — fast, exact):
+
+- Transform features through the pipeline preprocessor
+- Run `shap.TreeExplainer(rf).shap_values(X_transformed)`
+- Select SHAP values for the predicted class
+- Return top 5 features sorted by `|contribution|`
+- Positive contribution = pushed toward this attack class
+- Negative contribution = pushed toward normal
+
+SHAP values are stored in the alert record and displayed in the Alerts UI.
 
 ---
 
-## 6. Alert Severity Rules
+## 6. Database Schema (SQLite)
 
-| Predicted Class | Base Severity | Upgraded to… |
+### `alerts` table
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | TEXT PK | uuid4 |
+| `event_id` | TEXT | Links alert to history row |
+| `timestamp` | TEXT | UTC datetime string |
+| `type` | TEXT | "Dos Detection", "Anomaly Detection", etc. |
+| `severity` | TEXT | info / medium / high / critical |
+| `source_ip` | TEXT | Source IP (or "N/A") |
+| `destination_ip` | TEXT | Destination IP (or "N/A") |
+| `source_port` | INT | — |
+| `destination_port` | INT | — |
+| `protocol` | TEXT | tcp / udp / other |
+| `confidence` | FLOAT | Model confidence (0–100) |
+| `latency_ms` | FLOAT | Inference latency |
+| `model_used` | TEXT | Active model key |
+| `description` | TEXT | Human-readable description |
+| `status` | TEXT | active / reviewed / false-positive / resolved |
+| `anomaly_score` | FLOAT | IsolationForest score (0–1) |
+| `shap_top5` | TEXT | JSON list of {feature, contribution} |
+
+### `prediction_history` table
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | INT PK | Auto-increment |
+| `event_id` | TEXT | Correlation ID |
+| `timestamp` | TEXT | UTC datetime |
+| `prediction` | TEXT | Predicted class |
+| `confidence` | FLOAT | 0–100 |
+| `latency_ms` | FLOAT | ms |
+| `model_used` | TEXT | |
+| `source_ip` | TEXT | |
+| `destination_ip` | TEXT | |
+| `source_port` | INT | |
+| `destination_port` | INT | |
+| `protocol` | TEXT | |
+| `anomaly_score` | FLOAT | |
+
+### `settings` table
+
+| Column | Type | Description |
+|---|---|---|
+| `key` | TEXT PK | Setting name |
+| `value` | TEXT | JSON-encoded value |
+
+---
+
+## 7. Alert Severity Rules
+
+| Predicted Class | Base Severity | Upgraded at ≥90% confidence |
 |---|---|---|
 | normal | info | — |
-| probe | medium | high (if confidence ≥ 90%) |
-| dos | high | critical (if confidence ≥ 90%) |
-| r2l | high | critical (if confidence ≥ 90%) |
-| u2r | critical | critical (always) |
+| probe | medium | high |
+| dos | high | critical |
+| ddos | critical | critical |
+| r2l | high | critical |
+| u2r | critical | critical |
+| bot | critical | critical |
+| web_attack | high | critical |
+| anomaly (IF only) | high | high |
 
 ---
 
-## 7. Deployment Architecture
+## 8. Deployment Architecture
 
-### 7.1 Local Development
+### Local Development
 
 ```
-Terminal 1: python backend/app.py          → http://127.0.0.1:5000
-Terminal 2: cd frontend && npm run dev     → http://localhost:5173
+Terminal 1: cd backend && python app.py      → http://127.0.0.1:5000
+Terminal 2: cd frontend && npm run dev       → http://localhost:5173
 ```
 
-### 7.2 Docker Compose
+### Docker Compose
 
 ```
 docker compose up --build
 
-ids-backend   → 0.0.0.0:5000  (Flask, python:3.11-slim)
-ids-frontend  → 0.0.0.0:8080  (nginx:1.27, static React bundle)
+ids-backend   → 0.0.0.0:5000   python:3.11-slim, libpcap
+ids-frontend  → 0.0.0.0:8080   nginx:1.27-alpine, static React
 ```
 
-### 7.3 Kubernetes
+### Kubernetes
 
 ```
 kubectl apply -f k8s/
 
-ids-backend  Deployment  → ClusterIP Service :5000
-ids-frontend Deployment  → NodePort Service  :30080
-HPA          → scales backend 1–4 replicas at 70% CPU
+ids-backend   Deployment → ClusterIP Service :5000
+ids-frontend  Deployment → NodePort Service  :30080
+HPA           → scales backend 1–4 replicas at 70% CPU
 ```
 
 ---
 
-## 8. Streaming Layer (Current and Future)
+## 9. Streaming Layer
 
-**Current implementation:** synchronous HTTP request-response.
-The frontend polls REST endpoints every 3–5 seconds.
+**Current:** SSE (`/stream/alerts`) — push-based, no polling needed.
+Each connected client subscribes to a `queue.Queue`. When `_db_append_alert()`
+is called, it broadcasts to all active queues.
 
-**Internal event flow (Phase 8 foundation):**
-Each prediction record carries:
-- `event_id` — uuid4 generated at ingestion
-- `ingested_at` — timestamp at flow capture
-- `timestamp` — timestamp at prediction completion
-- `latency_ms` — inference time in milliseconds
-
-**Future migration path to Redis Streams:**
-The current synchronous inference call in `app.py:_run_inference()` can be
-replaced with:
+**Future migration to Redis Streams:**
 ```python
-# Producer
-redis_client.xadd("ids:flows", {"event_id": ..., "features": json.dumps(fv)})
+# Producer (replace _broadcast_alert)
+redis_client.xadd("ids:alerts", {"data": json.dumps(alert_dict)})
 
-# Consumer (separate worker)
-events = redis_client.xread({"ids:flows": "$"}, block=1000)
-for event in events:
-    _run_inference(...)
+# Consumer (frontend or separate service)
+events = redis_client.xread({"ids:alerts": "$"}, block=1000)
 ```
-No other application code needs to change because `event_id` propagation
-is already in place.
+No other application code changes because `event_id` propagation is
+already in place end-to-end.
 
 ---
 
-## 9. Security Architecture
+## 10. Security Architecture
 
 | Control | Implementation | Status |
 |---|---|---|
-| API authentication | `X-API-Key` header, env var `IDS_API_KEY` | ✅ Optional |
-| CORS restriction | Configurable origins via `IDS_CORS_ORIGINS` | ✅ |
-| Input validation | All 27 features validated type + enum | ✅ |
-| No hardcoded secrets | All config via env vars / `.env` | ✅ |
-| Capture safety | Probe generator restricted to `127.0.0.1` | ✅ |
-| Rate limiting | `flask-limiter` included in requirements | 🚧 Configured in next phase |
-| HTTPS | SSL termination via nginx or cloud LB | 📋 Documented |
-| Audit logging | Structured JSON request log | ✅ |
+| API authentication | `X-API-Key` header, env `IDS_API_KEY` | ✅ Optional, production-ready |
+| Rate limiting | flask-limiter: 120/min predict, 10/min capture | ✅ Active |
+| CORS restriction | Configurable `IDS_CORS_ORIGINS` | ✅ |
+| Input validation | All 27 features type/enum checked | ✅ |
+| No hardcoded secrets | All config via `.env` | ✅ |
+| Structured audit log | JSON request log (method, path, status, ms) | ✅ |
+| SQL injection | ORM (SQLAlchemy) — no raw SQL | ✅ |
+| Capture safety | Probe generator restricted to 127.0.0.1 | ✅ |
+| HTTPS | SSL termination via nginx/cloud LB | 📋 Documented |
+| Secrets in Kubernetes | `secret.template.yaml` with instructions | 📋 Template provided |
 
 ---
 

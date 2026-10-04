@@ -1,2 +1,44 @@
+# ── Python ──────────────────────────────────────────────────
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# ── Environment / secrets ────────────────────────────────────
 .env
-.venv
+.env.local
+k8s/secret.yaml
+
+# ── Large dataset files (CIC-IDS-2017 raw CSVs) ─────────────
+# These are too large for GitHub (up to 214 MB each).
+# Download from: https://www.unb.ca/cic/datasets/ids-2017.html
+MachineLearningCSV/
+
+# ── Trained model binaries ───────────────────────────────────
+# Regenerate with: python backend/model/train_model.py
+#                  python backend/train_anomaly.py
+backend/model/*.pkl
+
+# ── Large processed datasets ────────────────────────────────
+# Regenerate with: python backend/cicids_pipeline.py
+backend/data/live_flows.csv
+backend/data/test_flows.csv
+
+# ── Runtime / generated data ─────────────────────────────────
+backend/data/ids.db
+backend/data/feedback.jsonl
+
+# ── Node / frontend ──────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# ── OS ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
