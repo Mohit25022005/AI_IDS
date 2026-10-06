@@ -27,9 +27,13 @@ def client():
     os.environ.pop("IDS_API_KEY", None)
     import app as ids_app
     ids_app.app.config["TESTING"] = True
-    # Reset prediction history and alerts for a clean smoke run
-    ids_app.prediction_history.clear()
-    ids_app.alerts_data.clear()
+
+    # v3 uses SQLite — clear the DB tables instead of in-memory lists
+    with ids_app.app.app_context():
+        ids_app.db.session.query(ids_app.HistoryRow).delete()
+        ids_app.db.session.query(ids_app.AlertRow).delete()
+        ids_app.db.session.commit()
+
     with ids_app.app.test_client() as c:
         yield c
 
@@ -52,7 +56,7 @@ class TestSmokeEndToEnd:
         )
         assert r.status_code == 200
         data = json.loads(r.data)
-        assert data["prediction"].lower() in {"normal", "probe", "dos", "r2l", "u2r"}
+        assert data["prediction"].lower() in {"normal", "probe", "dos", "ddos", "r2l", "web_attack", "bot"}
         assert 0.0 <= data["confidence"] <= 1.0
         assert data["latency_ms"] >= 0
         assert "event_id" in data

@@ -77,10 +77,12 @@ def validate_feature_dict(features: dict) -> list:
                 errors.append(f"Feature '{feat}' must be numeric, got {type(features[feat])}")
 
     if "protocol" in features:
-        proto = str(features["protocol"]).lower().strip()
-        if proto not in VALID_PROTOCOLS:
+        raw_proto = str(features["protocol"]).strip()
+        # Reject anything that isn't already lowercase — the API contract
+        # requires lowercase values (tcp / udp / other).
+        if raw_proto != raw_proto.lower() or raw_proto.lower() not in VALID_PROTOCOLS:
             errors.append(
-                f"protocol must be one of {VALID_PROTOCOLS}, got '{proto}'"
+                f"protocol must be one of {VALID_PROTOCOLS} (lowercase), got '{raw_proto}'"
             )
 
     return errors

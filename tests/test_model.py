@@ -61,7 +61,7 @@ class TestModelPrediction:
         df = pd.DataFrame([normal_features], columns=feature_columns)
         pred = str(loaded_model.predict(df)[0]).lower()
         # Must be one of the classes the model was trained on
-        assert pred in {"normal", "probe", "dos", "r2l", "u2r"}
+        assert pred in {"normal", "probe", "dos", "ddos", "r2l", "web_attack", "bot"}
 
     def test_predict_proba_sums_to_one(self, loaded_model, feature_columns, normal_features):
         df = pd.DataFrame([normal_features], columns=feature_columns)

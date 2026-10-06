@@ -125,23 +125,6 @@ _PROFILES: Dict[str, Dict[str, Any]] = {
         "protocol_weights":    [1.0],
     },
 
-    "u2r": {
-        "description": "User-to-root — low-volume privilege escalation",
-        "duration_range":      (1.0, 60.0),      # interactive session
-        "src_port_range":      (1024, 65535),
-        "dst_port_common":     [22, 23, 80, 443],
-        "fwd_packets_range":   (2, 15),           # very few packets
-        "fwd_bwd_ratio":       (0.45, 0.65),      # near-symmetric interactive
-        "packet_size_range":   (40, 300),
-        "syn_per_flow":        (0, 1),
-        "ack_per_flow":        (1, 14),
-        "fin_per_flow":        (0, 2),
-        "rst_per_flow":        (0, 0),
-        "psh_per_flow":        (1, 14),           # interactive keystrokes
-        "protocols":           ["tcp"],
-        "protocol_weights":    [1.0],
-    },
-
     "ddos": {
         "description": "Distributed Denial-of-Service — high-volume multi-source flood",
         "duration_range":      (0.001, 0.5),
@@ -242,6 +225,14 @@ def _generate_one(traffic_class: str, rng: random.Random) -> Dict[str, Any]:
     # For UDP, zero out TCP flags
     if protocol != "tcp":
         syn_cnt = ack_cnt = fin_cnt = rst_cnt = psh_cnt = 0
+
+    # Clamp individual flag counts so ratios stay within [0, 1].
+    # syn_ratio = syn_cnt / total_pkts must be <= 1.
+    syn_cnt = min(syn_cnt, total_pkts)
+    ack_cnt = min(ack_cnt, total_pkts)
+    fin_cnt = min(fin_cnt, total_pkts)
+    rst_cnt = min(rst_cnt, total_pkts)
+    psh_cnt = min(psh_cnt, total_pkts)
 
     # --- Ratios ---
     fwd_pkt_ratio = round(fwd_pkts / total_pkts, 4)

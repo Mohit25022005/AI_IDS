@@ -39,6 +39,14 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Text, Float, Integer, String, DateTime
 from dotenv import load_dotenv
 
+# Ensure backend/ is on sys.path so relative imports (simulator, url_kdd)
+# work regardless of where the process is launched from.
+import sys
+_BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
+from simulator import generate_synthetic_flows
 from url_kdd import (
     capture_flows,
     build_feature_vector,
@@ -463,18 +471,31 @@ def _compute_shap_top5(features_df: pd.DataFrame, model_key: str) -> list:
 # ==================================================================
 def _anomaly_score(features_df: pd.DataFrame) -> float | None:
     """
-    Return the IsolationForest anomaly score for one flow.
-    Higher (closer to 0 / positive) = more anomalous.
-    Returns None if model not loaded.
+    Return a normalised IsolationForest anomaly score in [0, 1].
+    0.0 = perfectly normal, 1.0 = highly anomalous.
+
+    IsolationForest.decision_function() returns:
+      - Higher (more positive) values → normal traffic
+      - Lower (more negative) values → anomalous traffic
+
+    The CIC-IDS-2017 decision_function range is approximately [-0.28, +0.17].
+    We rescale so that the most anomalous raw value maps to 1.0 and the most
+    normal maps to 0.0, then clamp to [0, 1].
     """
     if _anomaly_model is None:
         return None
     try:
-        # decision_function returns negative score for anomalies;
-        # we negate so that higher = more anomalous, range roughly 0-1
         raw = float(_anomaly_model.decision_function(features_df)[0])
-        # Normalise to 0-1 range (clamp)
-        score = max(0.0, min(1.0, 0.5 - raw))
+
+        # Empirical bounds from training data (CIC-IDS-2017 normal subset)
+        #   raw_min = -0.2843  (most anomalous seen in training)
+        #   raw_max =  0.1658  (most normal seen in training)
+        RAW_MIN = -0.2843
+        RAW_MAX =  0.1658
+
+        # Invert and rescale: low raw → high score (anomalous)
+        score = (RAW_MAX - raw) / (RAW_MAX - RAW_MIN)
+        score = max(0.0, min(1.0, score))
         return round(score, 4)
     except Exception as exc:
         logger.debug(f"Anomaly scoring failed: {exc}")
@@ -831,7 +852,7 @@ def predict():
     elif (
         prediction.lower() == "normal"
         and ascore is not None
-        and ascore > 0.75
+        and ascore > 0.60
     ):
         alert = AlertRow(
             id=str(uuid.uuid4()),
@@ -1278,11 +1299,6 @@ def insights_latency():
 @require_api_key
 @limiter.limit("30/minute")
 def simulate():
-    try:
-        from simulator import generate_synthetic_flows
-    except ImportError:
-        return jsonify({"error": "simulator.py not found"}), 501
-
     data  = request.get_json(silent=True) or {}
     cls   = str(data.get("class", "normal")).lower()
     count = min(500, max(1, int(data.get("count", 10))))
@@ -1302,14 +1318,64 @@ def simulate():
             continue
 
         timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        event_id  = str(uuid.uuid4())
+
+        # Persist to prediction history so it shows in Monitor + Dashboard
+        hist_row = HistoryRow(
+            event_id=event_id,
+            timestamp=timestamp,
+            prediction=prediction,
+            confidence=round(confidence * 100, 2),
+            latency_ms=latency_ms,
+            model_used=f"{active_model_key()} [synthetic:{cls}]",
+            source_ip="synthetic",
+            destination_ip="synthetic",
+            source_port=int(fv.get("source_port", 0)),
+            destination_port=int(fv.get("destination_port", 0)),
+            protocol=str(fv.get("protocol", "tcp")),
+            anomaly_score=ascore,
+        )
+        _db_append_history(hist_row)
+
+        # Generate alert if warranted (same rules as live traffic)
+        if (
+            prediction.lower() != "normal"
+            and confidence * 100 >= settings["sensitivity_threshold"]
+        ):
+            severity = get_alert_severity(prediction, confidence)
+            alert = AlertRow(
+                id=str(uuid.uuid4()),
+                event_id=event_id,
+                timestamp=timestamp,
+                type=f"{prediction.title()} Detection",
+                severity=severity,
+                source_ip="synthetic",
+                destination_ip="synthetic",
+                source_port=int(fv.get("source_port", 0)),
+                destination_port=int(fv.get("destination_port", 0)),
+                protocol=str(fv.get("protocol", "tcp")),
+                confidence=round(confidence * 100, 2),
+                latency_ms=latency_ms,
+                model_used=f"{active_model_key()} [synthetic:{cls}]",
+                description=(
+                    f"[SYNTHETIC] {prediction.title()} detected from simulated "
+                    f"{cls} traffic. Confidence: {confidence*100:.1f}%."
+                ),
+                status="active",
+                anomaly_score=ascore,
+                shap_top5=json.dumps(shap_top5),
+            )
+            _db_append_alert(alert)
+
         results.append({
+            "event_id":      event_id,
             "synthetic_class": cls,
-            "prediction":      prediction,
-            "confidence":      round(confidence * 100, 2),
-            "latency_ms":      latency_ms,
-            "shap_top5":       shap_top5,
-            "anomaly_score":   ascore,
-            "timestamp":       timestamp,
+            "prediction":    prediction,
+            "confidence":    round(confidence * 100, 2),
+            "latency_ms":    latency_ms,
+            "shap_top5":     shap_top5,
+            "anomaly_score": ascore,
+            "timestamp":     timestamp,
         })
 
     return jsonify({
@@ -1334,7 +1400,7 @@ def feedback():
     alert_id   = data.get("alert_id")
     true_label = data.get("true_label", "").lower()
 
-    valid_labels = {"normal", "probe", "dos", "r2l", "u2r"}
+    valid_labels = {"normal", "probe", "dos", "ddos", "r2l", "bot", "web_attack"}
     if not alert_id:
         return jsonify({"error": "alert_id required"}), 400
     if true_label not in valid_labels:
