@@ -7,16 +7,16 @@ import { api, predictIntrusion } from "@/lib/api.ts";
 
 // ── Feature columns ──────────────────────────────────────────────
 const LIVE_FEATURE_COLUMNS = [
-  "duration","source_port","destination_port",
-  "forward_packets","backward_packets",
-  "forward_bytes","backward_bytes",
-  "total_packets","total_bytes",
-  "packets_per_second","bytes_per_second",
-  "mean_packet_size","min_packet_size","max_packet_size","packet_size_std",
-  "syn_count","ack_count","fin_count","rst_count","psh_count",
-  "forward_packet_ratio","backward_packet_ratio",
-  "forward_byte_ratio","backward_byte_ratio",
-  "syn_ratio","rst_ratio","protocol",
+  "duration", "source_port", "destination_port",
+  "forward_packets", "backward_packets",
+  "forward_bytes", "backward_bytes",
+  "total_packets", "total_bytes",
+  "packets_per_second", "bytes_per_second",
+  "mean_packet_size", "min_packet_size", "max_packet_size", "packet_size_std",
+  "syn_count", "ack_count", "fin_count", "rst_count", "psh_count",
+  "forward_packet_ratio", "backward_packet_ratio",
+  "forward_byte_ratio", "backward_byte_ratio",
+  "syn_ratio", "rst_ratio", "protocol",
 ];
 
 // ── Pre-built test vectors — exact real samples from CIC-IDS-2017 test set
@@ -124,18 +124,18 @@ const TEST_VECTORS: Record<string, Record<string, number | string>> = {
 
 const SEVERITY_COLORS: Record<string, string> = {
   critical: "bg-red-900/30 text-red-400 border-red-600/40",
-  high:     "bg-orange-900/30 text-orange-400 border-orange-600/40",
-  medium:   "bg-yellow-900/30 text-yellow-400 border-yellow-600/40",
-  info:     "bg-blue-900/30 text-blue-400 border-blue-600/40",
+  high: "bg-orange-900/30 text-orange-400 border-orange-600/40",
+  medium: "bg-yellow-900/30 text-yellow-400 border-yellow-600/40",
+  info: "bg-blue-900/30 text-blue-400 border-blue-600/40",
 };
 
 const ATTACK_COLORS: Record<string, string> = {
-  normal:     "text-green-500",
-  probe:      "text-yellow-500",
-  dos:        "text-red-500",
-  ddos:       "text-red-600",
-  r2l:        "text-orange-500",
-  bot:        "text-purple-500",
+  normal: "text-green-500",
+  probe: "text-yellow-500",
+  dos: "text-red-500",
+  ddos: "text-red-600",
+  r2l: "text-orange-500",
+  bot: "text-purple-500",
   web_attack: "text-pink-500",
 };
 
@@ -145,14 +145,14 @@ function predColor(pred: string) {
 
 // ── Component ────────────────────────────────────────────────────
 export default function Monitor() {
-  const [features, setFeatures]             = useState<Record<string, number | string>>({});
-  const [capturing, setCapturing]           = useState(false);
-  const [captureMode, setCaptureMode]       = useState("normal");
+  const [features, setFeatures] = useState<Record<string, number | string>>({});
+  const [capturing, setCapturing] = useState(false);
+  const [captureMode, setCaptureMode] = useState("normal");
   const [captureResults, setCaptureResults] = useState<any[]>([]);
-  const [monitoring, setMonitoring]         = useState(false);
-  const [result, setResult]                 = useState<any>(null);
-  const [history, setHistory]               = useState<any[]>([]);
-  const [alerts, setAlerts]                 = useState<any[]>([]);
+  const [monitoring, setMonitoring] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<any[]>([]);
   const { toast } = useToast();
 
   const updateFeature = (name: string, value: string) => {
@@ -200,7 +200,7 @@ export default function Monitor() {
     if (!pendingPredict) return;
     setPendingPredict(null);
     handlePredict(pendingPredict);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPredict]);
 
   // ── Predict (accepts optional override to avoid stale-closure issues) ──
@@ -208,8 +208,7 @@ export default function Monitor() {
     const f = overrideFeatures ?? features;
 
     if (Object.keys(f).length !== LIVE_FEATURE_COLUMNS.length) {
-      toast({ variant: "destructive", title: "Incomplete Features",
-              description: `Load a test vector or fill all ${LIVE_FEATURE_COLUMNS.length} fields.` });
+    
       return;
     }
 
@@ -217,17 +216,15 @@ export default function Monitor() {
     for (const feat of LIVE_FEATURE_COLUMNS) {
       if (feat === "protocol") {
         const v = String(f[feat]).toLowerCase().trim();
-        if (!["tcp","udp","other"].includes(v)) {
-          toast({ variant: "destructive", title: "Invalid protocol",
-                  description: "Must be tcp, udp, or other." });
+        if (!["tcp", "udp", "other"].includes(v)) {
+     
           return;
         }
         prepared[feat] = v;
       } else {
         const v = Number(f[feat]);
         if (!Number.isFinite(v)) {
-          toast({ variant: "destructive", title: "Invalid Feature",
-                  description: `${feat} must be a number.` });
+         
           return;
         }
         prepared[feat] = v;
@@ -237,15 +234,11 @@ export default function Monitor() {
     try {
       const res = await predictIntrusion(prepared);
       setResult(res);
-      toast({
-        title: "Prediction Complete",
-        description: `${res.prediction.toUpperCase()}  ·  Confidence: ${(res.confidence * 100).toFixed(1)}%  ·  Anomaly: ${res.anomaly_score !== null ? (res.anomaly_score * 100).toFixed(0) + "%" : "N/A"}`,
-      });
+
       fetchHistory();
       fetchAlerts();
     } catch (err: any) {
-      toast({ variant: "destructive", title: "Prediction Error",
-              description: err.response?.data?.error ?? err.message });
+      console.error("Prediction Error:", err);
     }
   };
 
@@ -256,13 +249,10 @@ export default function Monitor() {
       const response = await api.post("/capture", { capture_time: 5, mode: captureMode });
       const flows = response.data?.flows || [];
       setCaptureResults(flows);
-      toast({ title: "Capture Complete",
-              description: `${flows.length} flow(s) analysed.` });
       fetchHistory();
       fetchAlerts();
     } catch (err: any) {
-      toast({ variant: "destructive", title: "Capture Failed",
-              description: err.response?.data?.error ?? err.message });
+     console.error("Capture Failed:", err);
     } finally {
       setCapturing(false);
     }
@@ -276,24 +266,10 @@ export default function Monitor() {
     if (!monitoring) return;
     const id = setInterval(() => { if (!capturing) handleCapture(); }, 10000);
     return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monitoring]);
 
-  // ── Simulate ───────────────────────────────────────────────────
-  const handleSimulate = async (cls: string) => {
-    try {
-      const res = await api.post("/simulate", { class: cls, count: 5 });
-      const results = res.data.results ?? [];
-      const preds = results.map((r: any) => r.prediction).join(", ");
-      toast({ title: `Simulate: ${cls.toUpperCase()}`,
-              description: `5 synthetic flows → ${preds}` });
-      fetchHistory();
-      fetchAlerts();
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Simulate Failed",
-              description: err.response?.data?.error ?? err.message });
-    }
-  };
+
 
   // ── Render ─────────────────────────────────────────────────────
   return (
@@ -315,11 +291,10 @@ export default function Monitor() {
               key={cls}
               size="sm"
               variant="outline"
-              className={`capitalize border ${
-                cls === "normal"
+              className={`capitalize border ${cls === "normal"
                   ? "border-green-600/40 text-green-500 hover:bg-green-900/20"
                   : "border-red-600/40 text-red-400 hover:bg-red-900/20"
-              }`}
+                }`}
               onClick={() => loadTestVector(cls)}
             >
               Load {cls.replace("_", " ")}
@@ -328,29 +303,7 @@ export default function Monitor() {
         </div>
       </div>
 
-      {/* ── Simulate Buttons ────────────────────────────────── */}
-      <div className="rounded-lg border border-border p-4 space-y-3">
-        <div>
-          <h2 className="text-base font-semibold">Simulate Traffic</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Generate 5 synthetic flows per class and run them through the active model.
-            Results appear in prediction history and may generate alerts.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {Object.keys(TEST_VECTORS).map(cls => (
-            <Button
-              key={cls}
-              size="sm"
-              variant="secondary"
-              className="capitalize"
-              onClick={() => handleSimulate(cls)}
-            >
-              Simulate {cls.replace("_", " ")}
-            </Button>
-          ))}
-        </div>
-      </div>
+
 
       {/* ── Prediction Result ────────────────────────────────── */}
       {result && (
@@ -486,7 +439,7 @@ export default function Monitor() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/20">
-                {["Timestamp","Source","Destination","Protocol","Prediction","Confidence","Anomaly"].map(h => (
+                {["Timestamp", "Source", "Destination", "Protocol", "Prediction", "Confidence", "Anomaly"].map(h => (
                   <th key={h} className="text-left py-2 px-3 text-xs font-medium text-muted-foreground">{h}</th>
                 ))}
               </tr>
@@ -512,8 +465,8 @@ export default function Monitor() {
                   <td className="py-2 px-3 text-xs">
                     {item.anomaly_score !== null && item.anomaly_score !== undefined
                       ? <span className={item.anomaly_score > 0.60 ? "text-red-400 font-semibold" : "text-muted-foreground"}>
-                          {(item.anomaly_score * 100).toFixed(0)}%
-                        </span>
+                        {(item.anomaly_score * 100).toFixed(0)}%
+                      </span>
                       : <span className="text-muted-foreground">—</span>
                     }
                   </td>
@@ -532,19 +485,19 @@ export default function Monitor() {
         {alerts.length === 0
           ? <p className="text-sm text-muted-foreground py-3">No active alerts</p>
           : <div className="space-y-2">
-              {alerts.map(alert => (
-                <div key={alert.id} className={`rounded-lg border p-3 ${SEVERITY_COLORS[alert.severity] ?? SEVERITY_COLORS.medium}`}>
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold text-sm">{alert.type}</p>
-                    <Badge className={SEVERITY_COLORS[alert.severity] ?? ""}>
-                      {alert.severity?.toUpperCase()}
-                    </Badge>
-                  </div>
-                  <p className="text-xs mt-1 opacity-80">{alert.description}</p>
-                  <p className="text-xs mt-0.5 opacity-60">{alert.timestamp}</p>
+            {alerts.map(alert => (
+              <div key={alert.id} className={`rounded-lg border p-3 ${SEVERITY_COLORS[alert.severity] ?? SEVERITY_COLORS.medium}`}>
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-sm">{alert.type}</p>
+                  <Badge className={SEVERITY_COLORS[alert.severity] ?? ""}>
+                    {alert.severity?.toUpperCase()}
+                  </Badge>
                 </div>
-              ))}
-            </div>
+                <p className="text-xs mt-1 opacity-80">{alert.description}</p>
+                <p className="text-xs mt-0.5 opacity-60">{alert.timestamp}</p>
+              </div>
+            ))}
+          </div>
         }
       </div>
     </div>
